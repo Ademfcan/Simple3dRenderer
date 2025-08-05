@@ -77,11 +77,12 @@ class Program
 
             float x_off = 0;
 
-            Vector3 axis = Vector3.UnitY; // Rotation axis (Y)
-            float angleRadians = MathF.PI / 4; // 45 degrees in radians
+            float objrotY = 0;
 
             float camX = 0;
             float camZ = 0;
+
+            float camrotY = 0;
 
             while (running)
             {
@@ -111,6 +112,13 @@ class Program
                                 camZ++;
                                 Console.WriteLine("Down arrow pressed");
                                 break;
+                            case SDL_Keycode.SDLK_A:
+                                camrotY+=10;
+                                break;
+                            case SDL_Keycode.SDLK_D:
+                                camrotY-=10;
+                                break;
+
                         }
                     }
                 }
@@ -120,11 +128,12 @@ class Program
                 SDL3.SDL_RenderClear(renderer);
 
                 camera.Position = new Vector3(camX, 0, camZ);
+                camera.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float) (camrotY / 180 * Math.PI));
 
                 mesh.Position = new Vector3(x_off, 0, -5);
-                mesh.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angleRadians);
-                angleRadians += 0.1f;
-                x_off += 0.01f;
+                mesh.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, objrotY);
+                objrotY += 0.1f;
+                // x_off += 0.01f;
                 SDL_Color[,] frame = Pipeline.Run(camera, mesh);
 
 
