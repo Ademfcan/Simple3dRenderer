@@ -4,14 +4,14 @@ namespace Simple3dRenderer
 {   // Sutherland-Hodgman Algo
     public static class Clipper
     {
-        public static List<(Vector<float> v1, Vector<float> v2, Vector<float> v3)> ClipTriangles(
-            List<(Vector<float> v1, Vector<float> v2, Vector<float> v3)> triangles)
+        public static List<(Vertex v1, Vertex v2, Vertex v3)> ClipTriangles(
+            List<(Vertex v1, Vertex v2, Vertex v3)> triangles)
         {
-            var clipped = new List<(Vector<float> v1, Vector<float> v2, Vector<float> v3)>();
+            var clipped = new List<(Vertex v1, Vertex v2, Vertex v3)>();
 
             foreach (var triangle in triangles)
             {
-                var poly = new List<Vector<float>> { triangle.v1, triangle.v2, triangle.v3 };
+                var poly = new List<Vertex> { triangle.v1, triangle.v2, triangle.v3 };
 
                 foreach (var plane in GetClipPlanes())
                 {
@@ -23,8 +23,10 @@ namespace Simple3dRenderer
                         var current = inputList[i];
                         var previous = inputList[(i - 1 + inputList.Count) % inputList.Count];
 
-                        bool currentInside = plane.IsInside(current);
-                        bool previousInside = plane.IsInside(previous);
+                        bool currentInside = IsInside(current, plane);
+                        bool previousInside = IsInside(previous, plane);
+
+                        // Console.WriteLine("Is valid?:  " + (currentInside || previousInside));
 
                         if (currentInside)
                         {
@@ -40,10 +42,10 @@ namespace Simple3dRenderer
                         }
                     }
 
-                    if (poly.Count < 3) break;
+                    if (poly.Count < 3)
+                        break; // completely clipped
                 }
 
-                // Triangulate clipped polygon (fan)
                 for (int i = 1; i < poly.Count - 1; i++)
                 {
                     clipped.Add((poly[0], poly[i], poly[i + 1]));
@@ -53,54 +55,36 @@ namespace Simple3dRenderer
             return clipped;
         }
 
-        private static Vector<float> Intersect(Vector<float> a, Vector<float> b, ClipPlane plane)
+        private static bool IsInside(Vertex v, Vector<float> plane)
         {
-            // Find t such that (1 - t)a + t*b is on the plane
-            float t = plane.ComputeIntersectionT(a, b);
-            return a + (b - a) * t;
+            return plane[0] * v.Position.X + plane[1] * v.Position.Y + plane[2] * v.Position.Z + plane[3] * v.Position.W >= 0;
         }
 
-        private static IEnumerable<ClipPlane> GetClipPlanes()
+        private static Vertex Intersect(Vertex a, Vertex b, Vector<float> plane)
         {
-            yield return new ClipPlane(0, +1); // x ≤  w
-            yield return new ClipPlane(0, -1); // x ≥ -w
-            yield return new ClipPlane(1, +1); // y ≤  w
-            yield return new ClipPlane(1, -1); // y ≥ -w
-            yield return new ClipPlane(2, +1); // z ≤  w
-            yield return new ClipPlane(2, -1); // z ≥ -w
+            float da = plane[0] * a.Position.X + plane[1] * a.Position.Y + plane[2] * a.Position.Z + plane[3] * a.Position.W;
+            float db = plane[0] * b.Position.X + plane[1] * b.Position.Y + plane[2] * b.Position.Z + plane[3] * b.Position.W;
+
+            float t = da / (da - db); // robust interpolation in 4D
+
+            return Vertex.Lerp(a, b, t);
         }
 
-        private class ClipPlane
+        
+        private static IEnumerable<Vector<float>> GetClipPlanes()
         {
-            private readonly int axis;
-            private readonly int sign; // +1 for ≤ w, -1 for ≥ -w
-
-            public ClipPlane(int axis, int sign)
-            {
-                this.axis = axis;
-                this.sign = sign;
-            }
-
-            public bool IsInside(Vector<float> v)
-            {
-                float coord = v[axis];
-                float w = v[3];
-                return sign * coord <= w;
-            }
-
-            public float ComputeIntersectionT(Vector<float> a, Vector<float> b)
-            {
-                float aCoord = a[axis], bCoord = b[axis];
-                float aW = a[3], bW = b[3];
-
-                float num = sign * aW - aCoord;
-                float den = aCoord - bCoord - sign * (aW - bW);
-
-                if (Math.Abs(den) < 1e-6f) return 0.5f; // Avoid div by zero
-
-                return num / den;
-            }
+            // Each Vector4 = [x, y, z, w] coefficients of the plane: Ax + By + Cz + Dw >= 0
+            yield return Vector<float>.Build.DenseOfArray(new float[] { -1,  0,  0,  1 }); // Right: x ≤ +w
+            yield return Vector<float>.Build.DenseOfArray(new float[] {  1,  0,  0,  1 }); // Left:  x ≥ -w
+            yield return Vector<float>.Build.DenseOfArray(new float[] {  0, -1,  0,  1 }); // Top:   y ≤ +w
+            yield return Vector<float>.Build.DenseOfArray(new float[] {  0,  1,  0,  1 }); // Bottom:y ≥ -w
+            yield return Vector<float>.Build.DenseOfArray(new float[] {  0,  0, -1,  1 }); // Far:   z ≤ +w
+            yield return Vector<float>.Build.DenseOfArray(new float[] {  0,  0,  1,  1 }); // Near:  z ≥ -w
         }
+
+
+
+
     }
 
 }

@@ -1,23 +1,24 @@
 using SDL;
 using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics;
 
 namespace Simple3dRenderer
 {
     public static class Rasterizer
     {
         public delegate SDL_Color FragmentShader(
-            Vector<float> p,
-            Vector<float> v0, Vector<float> v1, Vector<float> v2,
+            Vertex p,
+            Vertex v0, Vertex v1, Vertex v2,
             float w0, float w1, float w2);
 
         public static void RasterizeTriangle(
-            Vector<float> v0, Vector<float> v1, Vector<float> v2,
+            Vertex v0, Vertex v1, Vertex v2,
             SDL_Color[,] framebuffer, float[,] depthBuffer,
             FragmentShader shader)
         {
-            float x0 = v0[0], y0 = v0[1], z0 = v0[2];
-            float x1 = v1[0], y1 = v1[1], z1 = v1[2];
-            float x2 = v2[0], y2 = v2[1], z2 = v2[2];
+            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
+            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
+            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
 
             int minX = Math.Max(0, (int)Math.Floor(Math.Min(x0, Math.Min(x1, x2))));
             int maxX = Math.Min(framebuffer.GetLength(1) - 1, (int)Math.Ceiling(Math.Max(x0, Math.Max(x1, x2))));
@@ -53,11 +54,7 @@ namespace Simple3dRenderer
                             depthBuffer[y, x] = z;
 
                             // Interpolated point (for lighting etc.)
-                            Vector<float> p = Vector<float>.Build.Dense(3);
-                            p[0] = px;
-                            p[1] = py;
-                            p[2] = z;
-
+                            Vertex p = Vertex.Interpolate(v0, v1, v2, w0, w1, w2);
                             framebuffer[y, x] = shader(p, v0, v1, v2, w0, w1, w2);
                         }
                     }

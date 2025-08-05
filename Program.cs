@@ -1,12 +1,11 @@
 ﻿using SDL;
-    using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
+using MathNet.Numerics.LinearAlgebra;
 using Simple3dRenderer;
 using System.Numerics;
 
 class Program
 {
-    
+
     const int WINDOW_WIDTH = 640;
     const int WINDOW_HEIGHT = 480;
 
@@ -14,9 +13,11 @@ class Program
     const int RENDER_HEIGHT = 480;
     const int RENDER_FOV = 60;
 
+    const int FPS = 60;
+
     static void Main(string[] args)
     {
-        
+
 
 
         // Initialize SDL
@@ -57,13 +58,30 @@ class Program
             Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
             Mesh mesh = new();
 
-            mesh.AddTriangle(new Vector3(0, 0, -1),
-                        new Vector3(1, 0, 0),
-                        new Vector3(0.5f, 1, 0));
+            // Define pyramid vertices
+            Vertex top = new Vertex(new Vector3(0, 1, 0), new Vector3(1, 255, 255));
+            Vertex frontLeft = new Vertex(new Vector3(-1, -1, -1), new Vector3(255, 1, 255));
+            Vertex frontRight = new Vertex(new Vector3(1, -1, -1), new Vector3(255, 255, 20));
+            Vertex backRight = new Vertex(new Vector3(1, -1, 1), new Vector3(30, 255, 255));
+            Vertex backLeft = new Vertex(new Vector3(-1, -1, 1), new Vector3(255, 16, 255));
 
-            mesh.Position = new Vector3(0, 0, -5);
+            // Side triangles
+            mesh.AddTriangle(top, frontRight, frontLeft);   // Front face
+            mesh.AddTriangle(top, backRight, frontRight);   // Right face
+            mesh.AddTriangle(top, backLeft, backRight);     // Back face
+            mesh.AddTriangle(top, frontLeft, backLeft);     // Left face
 
-            SDL_Color[,] frame = Pipeline.Run(camera, mesh);
+            // Base (split into 2 triangles)
+            mesh.AddTriangle(frontLeft, frontRight, backRight); // Base triangle 1
+            mesh.AddTriangle(frontLeft, backRight, backLeft);
+
+            float x_off = 0;
+
+            Vector3 axis = Vector3.UnitY; // Rotation axis (Y)
+            float angleRadians = MathF.PI / 4; // 45 degrees in radians
+
+            float camX = 0;
+            float camZ = 0;
 
             while (running)
             {
@@ -73,11 +91,41 @@ class Program
                     {
                         running = false;
                     }
+                    else if ((SDL_EventType)e.type == SDL_EventType.SDL_EVENT_KEY_DOWN)
+                    {
+                        switch (e.key.key)
+                        {
+                            case SDL_Keycode.SDLK_LEFT:
+                                Console.WriteLine("Left arrow pressed");
+                                camX--;
+                                break;
+                            case SDL_Keycode.SDLK_RIGHT:
+                                Console.WriteLine("Right arrow pressed");
+                                camX++;
+                                break;
+                            case SDL_Keycode.SDLK_UP:
+                                camZ--;
+                                Console.WriteLine("Up arrow pressed");
+                                break;
+                            case SDL_Keycode.SDLK_DOWN:
+                                camZ++;
+                                Console.WriteLine("Down arrow pressed");
+                                break;
+                        }
+                    }
                 }
 
                 // Clear screen (black)
                 SDL3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL3.SDL_RenderClear(renderer);
+
+                camera.Position = new Vector3(camX, 0, camZ);
+
+                mesh.Position = new Vector3(x_off, 0, -5);
+                mesh.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angleRadians);
+                angleRadians += 0.1f;
+                x_off += 0.01f;
+                SDL_Color[,] frame = Pipeline.Run(camera, mesh);
 
 
                 for (int y = 0; y < RENDER_HEIGHT; y++)
@@ -91,8 +139,8 @@ class Program
                 }
 
                 SDL3.SDL_RenderPresent(renderer);  // <== This flushes the backbuffer to the screen
-                
-                SDL3.SDL_Delay(50);
+
+                SDL3.SDL_Delay(1000 / FPS);
             }
 
             // Cleanup
@@ -102,4 +150,6 @@ class Program
         }
 
     }
+
+    
 }
