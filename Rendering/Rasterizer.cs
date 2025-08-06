@@ -190,7 +190,7 @@ namespace Simple3dRenderer.Rendering
 
                         SDL_Color pixelColor = shader(v0, v1, v2, fw0, fw1, fw2);
 
-                        if (pixelColor.a == 255)
+                        if (pixelColor.a >= 254)
                         {
                             framebuffer[y, x] = pixelColor;
                             depthBuffer[y, x] = z_row;
@@ -287,7 +287,7 @@ namespace Simple3dRenderer.Rendering
                         {
                             SDL_Color pixelColor = shader(v0, v1, v2, fw0, fw1, fw2);
 
-                            if (pixelColor.a == 255)
+                            if (pixelColor.a >= 254)
                             {
                                 framebuffer[y, xi] = pixelColor;
                                 depthBuffer[y, xi] = z;
@@ -418,7 +418,7 @@ namespace Simple3dRenderer.Rendering
                                 {
                                     SDL_Color pixelColor = shader(v0, v1, v2, fw0, fw1, fw2);
 
-                                    if (pixelColor.a == 255)
+                                    if (pixelColor.a >= 254)
                                     {
                                         framebuffer[y, xi] = pixelColor;
                                         depthBuffer[y, xi] = z;
@@ -439,6 +439,7 @@ namespace Simple3dRenderer.Rendering
                 }
             }
         }
+
 
         private static int GetAdaptiveTileSize(float triangleArea)
         {
