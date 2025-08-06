@@ -1,13 +1,19 @@
 using System.Numerics;
+using System.Security.Cryptography.X509Certificates;
 using MathNet.Numerics.LinearAlgebra;
+using Simple3dRenderer.Textures;
 
-namespace Simple3dRenderer
+namespace Simple3dRenderer.Objects
 {
     public class Mesh
     {
         public Vector3 Position = Vector3.Zero;
         public Quaternion Rotation = Quaternion.Identity;
         public Vector3 Scale = new(1, 1, 1);
+
+        bool isOpaque = true;
+
+        public Texture? texture = null;
 
         public readonly List<Vertex> originalVertexes = [];
         public readonly List<(int, int, int)> indices = [];
@@ -31,6 +37,8 @@ namespace Simple3dRenderer
             int i1 = AddVertex(v1);
             int i2 = AddVertex(v2);
             AddTriangle(i0, i1, i2);
+
+            isOpaque &= (v0.Color.a == 255 && v1.Color.a == 255 && v2.Color.a == 255);
         }
 
         // public void AddTriangle(Vertex v0, Vertex v1, Vertex v2, Vector3 referenceNormal)
@@ -80,26 +88,16 @@ namespace Simple3dRenderer
             return m;
         }
 
-        private static void EnsureCounterClockwise(ref Vector3 v1, ref Vector3 v2, ref Vector3 v3, Vector3 referenceNormal)
+        public bool IsOpaque()
         {
-            var edge1 = v2 - v1;
-            var edge2 = v3 - v1;
-
-            // Cross product of two 3D vectors
-            var n1 = edge1[1] * edge2[2] - edge1[2] * edge2[1];
-            var n2 = edge1[2] * edge2[0] - edge1[0] * edge2[2];
-            var n3 = edge1[0] * edge2[1] - edge1[1] * edge2[0];
-            var normal = new Vector3(n1, n2, n3);
-
-
-            if (Vector3.Dot(normal, referenceNormal) < 0)
+            if (texture != null)
             {
-                // Swap v2 and v3
-                var temp = v2;
-                v2 = v3;
-                v3 = temp;
+                return texture.isOpaque;
             }
+
+            return isOpaque;
         }
+
     }
 
 }

@@ -1,7 +1,7 @@
 using System.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 
-namespace Simple3dRenderer
+namespace Simple3dRenderer.Extensions
 {
     public static class MatrixExtensions
     {

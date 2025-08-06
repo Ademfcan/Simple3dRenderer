@@ -1,13 +1,17 @@
 using System.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 using SDL;
+using Simple3dRenderer.Shaders;
+using Simple3dRenderer.Objects;
+using Simple3dRenderer.Extensions;
 
-namespace Simple3dRenderer
+
+namespace Simple3dRenderer.Rendering
 {
     public static class Pipeline
     {
 
-
+        private static readonly TextureShader shader = new();
 
         public static SDL_Color[,] RenderScene(Camera camera, List<Mesh> scene, SDL_Color backgroundColor = default)
         {
@@ -29,7 +33,30 @@ namespace Simple3dRenderer
             Matrix<float> viewtoclip = camera.getProjectionMatrix().ToMathNet();
             Matrix<float> mmtv = viewtoclip * worldtoview;
 
+            List<Mesh> opaques = [];
+            List<Mesh> transparents = [];
+
             foreach (Mesh mesh in scene)
+            {
+                if (mesh.IsOpaque())
+                {
+                    opaques.Add(mesh);
+                }
+                else
+                {
+                    transparents.Add(mesh);
+                }
+            }
+
+            // all opaques first
+            // then transparents
+
+            foreach (Mesh mesh in opaques)
+            {
+                RenderMesh(camera, mesh, frame_buf, depth_buf, mmtv);
+            }
+
+            foreach (Mesh mesh in transparents)
             {
                 RenderMesh(camera, mesh, frame_buf, depth_buf, mmtv);
             }
@@ -39,6 +66,7 @@ namespace Simple3dRenderer
 
         private static void RenderMesh(Camera camera, Mesh mesh, SDL_Color[,] frame_buf, float[,] depth_buf, Matrix<float> mmtv)
         {
+
             Matrix<float> vertexes = mesh.GetVertexMatrix();
 
             Matrix<float> objecttoworld = mesh.GetModelMatrix().ToMathNet();
@@ -55,27 +83,20 @@ namespace Simple3dRenderer
             NdcToScreen(triangles, in camera.HRes, in camera.VRes);
 
             // Rasterizer.RasterizeTrianglesBatch(triangles, frame_buf, depth_buf, GradientShader);
-            Rasterizer.RasterizeTrianglesBatchOptimized(triangles, frame_buf, depth_buf, GradientShader);
-        }
-
-        public static SDL_Color FlatWhiteShader(Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
-        {
-            return new SDL_Color { r = 255, g = 255, b = 255, a = 255 };
+            if (mesh.texture != null)
+            {
+                shader.texture = mesh.texture;
+                Rasterizer.RasterizeTrianglesBatchOptimized(triangles, frame_buf, depth_buf, shader.TexturedShader, mesh.IsOpaque());
+            }
+            else
+            {
+                Rasterizer.RasterizeTrianglesBatchOptimized(triangles, frame_buf, depth_buf, GradientShader, mesh.IsOpaque());
+            }
         }
 
         public static SDL_Color GradientShader(Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
         {
-            // Colors assigned to each vertex
-            float r0 = v0.Color.X, g0 = v0.Color.Y, b0 = v0.Color.Z;     // Red at vertex 0
-            float r1 = v1.Color.X, g1 = v1.Color.Y, b1 = v1.Color.Z;     // Green at vertex 1
-            float r2 = v2.Color.X, g2 = v2.Color.Y, b2 = v2.Color.Z;     // Blue at vertex 2
-
-            // Interpolate each channel with barycentric weights
-            byte r = (byte)(w0 * r0 + w1 * r1 + w2 * r2);
-            byte g = (byte)(w0 * g0 + w1 * g1 + w2 * g2);
-            byte b = (byte)(w0 * b0 + w1 * b1 + w2 * b2);
-
-            return new SDL_Color { r = r, g = g, b = b, a = 255 };
+            return SDLColorExtensions.Interpolate(v0.Color, v1.Color, v2.Color, w0, w1, w2);
         }
 
 
@@ -155,7 +176,7 @@ namespace Simple3dRenderer
 
             float x = (vertex.Position.X + 1) * 0.5f * width;
             float y = (1 - vertex.Position.Y) * 0.5f * height;
-            float z = (vertex.Position.Z + 1) * 0.5f;
+            float z = vertex.Position.Z;
 
             vertex.Position = new Vector4(x, y, z, 1);
         }
@@ -201,10 +222,9 @@ namespace Simple3dRenderer
                     }
                 }
             }
-            
+
             Console.WriteLine("C pixels!: " + c);
 
         }
-
     }
 }

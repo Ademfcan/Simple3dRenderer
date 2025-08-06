@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace Simple3dRenderer
+namespace Simple3dRenderer.Objects
 {
     public struct Camera(int HRes, int VRes, int Fov, float NearClip = 0.1f, float FarClip = 1e4f, Vector3 Position = default, Quaternion Rotation = default)
     {
