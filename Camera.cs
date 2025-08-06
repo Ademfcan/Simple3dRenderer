@@ -22,6 +22,7 @@ namespace Simple3dRenderer
             Matrix4x4 translationMatrix = Matrix4x4.CreateTranslation(-Position);
 
             // View matrix is inverse of camera transform
+            // NOTE: row major means left to right order
             return translationMatrix * rotationMatrix;
         }
 

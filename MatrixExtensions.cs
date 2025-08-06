@@ -5,6 +5,7 @@ namespace Simple3dRenderer
 {
     public static class MatrixExtensions
     {
+        // NOTE: this flips the matrix from row major to column major layout. this means A*B*C (which in row major is A then B then C) will now be the more normal (C then B then A)
         public static Matrix<float> ToMathNet(this Matrix4x4 m)
         {
             return Matrix<float>.Build.DenseOfArray(new float[,]

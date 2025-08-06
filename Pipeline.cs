@@ -1,57 +1,16 @@
 using System.Numerics;
-using System.Runtime.Intrinsics;
-using System.Security.Cryptography;
 using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.Optimization.LineSearch;
 using SDL;
-using Simple3dRenderer;
 
 namespace Simple3dRenderer
 {
     public static class Pipeline
     {
 
-        public static SDL_Color[,] Run(Camera camera, Mesh mesh, SDL_Color backgroundColor = default)
+
+
+        public static SDL_Color[,] RenderScene(Camera camera, List<Mesh> scene, SDL_Color backgroundColor = default)
         {
-            Matrix<float> vertexes = mesh.GetVertexMatrix();
-            // PrintMatrix(vertexes, nameof(vertexes));
-
-            Matrix<float> objecttoworld = mesh.GetModelMatrix().ToMathNet();
-            // PrintMatrix(objecttoworld, nameof(objecttoworld));
-
-            Matrix<float> worldVertexes = objecttoworld * vertexes;
-
-            // PrintMatrix(worldVertexes, nameof(worldVertexes));
-
-            Matrix<float> worldtoview = camera.getViewMatrix().ToMathNet();
-
-            // PrintMatrix(worldtoview, nameof(worldtoview));
-
-            Matrix<float> viewVertexes = worldtoview * worldVertexes;
-
-            // PrintMatrix(viewVertexes, nameof(viewVertexes));
-
-            Matrix<float> viewtoclip = camera.getProjectionMatrix().ToMathNet();
-
-            // PrintMatrix(viewtoclip, nameof(viewtoclip));
-
-            Matrix<float> clipVertexes = viewtoclip * viewVertexes;
-
-            // PrintMatrix(clipVertexes, nameof(clipVertexes));
-
-            var triangles = FilterClipVertexes(clipVertexes, mesh.originalVertexes, mesh.indices);
-
-            // Console.WriteLine("Finished filtering!");
-
-            ApplyPerspectiveDivide(triangles);
-
-
-            // Console.WriteLine("Finished to ndc!");
-
-            NdcToScreen(triangles, in camera.HRes, in camera.VRes);
-
-            // Console.WriteLine("Finished ndc to screen");
-
             SDL_Color[,] frame_buf = new SDL_Color[camera.VRes, camera.HRes];
             float[,] depth_buf = new float[camera.VRes, camera.HRes];
 
@@ -66,28 +25,45 @@ namespace Simple3dRenderer
                 }
             }
 
+            Matrix<float> worldtoview = camera.getViewMatrix().ToMathNet();
+            Matrix<float> viewtoclip = camera.getProjectionMatrix().ToMathNet();
+            Matrix<float> mmtv = viewtoclip * worldtoview;
 
-            foreach (var (v1, v2, v3) in triangles)
+            foreach (Mesh mesh in scene)
             {
-                Rasterizer.RasterizeTriangle(v1, v2, v3, frame_buf, depth_buf, GradientShader);
+                RenderMesh(camera, mesh, frame_buf, depth_buf, mmtv);
             }
-
-            // Console.WriteLine("Finished Rasterize!");
-
-
-            // Console.WriteLine("Finished!");
-
-            // PrintFrameBuffer(frame_buf);
 
             return frame_buf;
         }
 
-        public static SDL_Color FlatWhiteShader(Vertex p, Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
+        private static void RenderMesh(Camera camera, Mesh mesh, SDL_Color[,] frame_buf, float[,] depth_buf, Matrix<float> mmtv)
+        {
+            Matrix<float> vertexes = mesh.GetVertexMatrix();
+
+            Matrix<float> objecttoworld = mesh.GetModelMatrix().ToMathNet();
+
+
+            Matrix<float> mmtc = mmtv * objecttoworld;
+
+            Matrix<float> clipVertexes = mmtc * vertexes;
+
+            var triangles = FilterClipVertexes(clipVertexes, mesh.originalVertexes, mesh.indices);
+
+            ApplyPerspectiveDivide(triangles);
+
+            NdcToScreen(triangles, in camera.HRes, in camera.VRes);
+
+            // Rasterizer.RasterizeTrianglesBatch(triangles, frame_buf, depth_buf, GradientShader);
+            Rasterizer.RasterizeTrianglesBatchOptimized(triangles, frame_buf, depth_buf, GradientShader);
+        }
+
+        public static SDL_Color FlatWhiteShader(Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
         {
             return new SDL_Color { r = 255, g = 255, b = 255, a = 255 };
         }
 
-        public static SDL_Color GradientShader(Vertex p, Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
+        public static SDL_Color GradientShader(Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
         {
             // Colors assigned to each vertex
             float r0 = v0.Color.X, g0 = v0.Color.Y, b0 = v0.Color.Z;     // Red at vertex 0

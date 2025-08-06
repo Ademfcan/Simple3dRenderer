@@ -57,7 +57,7 @@ namespace Simple3dRenderer
             Matrix4x4 translationMatrix = Matrix4x4.CreateTranslation(Position);
 
             // Combine: Scale → Rotate → Translate
-            // Matrix4x4 modelMatrix = translationMatrix * rotationMatrix * scaleMatrix;
+            // NOTE: row major order so this is a correct SRT move
             Matrix4x4 modelMatrix = scaleMatrix * rotationMatrix * translationMatrix;
 
             return modelMatrix;
