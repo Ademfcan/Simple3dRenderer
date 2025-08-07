@@ -4,6 +4,7 @@ using SDL;
 using Simple3dRenderer.Shaders;
 using Simple3dRenderer.Objects;
 using Simple3dRenderer.Extensions;
+using System.Diagnostics;
 
 
 namespace Simple3dRenderer.Rendering
@@ -113,23 +114,33 @@ namespace Simple3dRenderer.Rendering
 
                 // update position
                 var c1 = ClipVertexes.Column(i1);
-                v1.Position = new Vector4(c1[0], c1[1], c1[2], c1[3]);
+                v1.PreClipInit(new Vector4(c1[0], c1[1], c1[2], c1[3]));
 
                 // update position
                 var c2 = ClipVertexes.Column(i2);
-                v2.Position = new Vector4(c2[0], c2[1], c2[2], c2[3]);
+                v2.PreClipInit(new Vector4(c2[0], c2[1], c2[2], c2[3]));
 
                 // update position
                 var c3 = ClipVertexes.Column(i3);
-                v3.Position = new Vector4(c3[0], c3[1], c3[2], c3[3]);
-
+                v3.PreClipInit(new Vector4(c3[0], c3[1], c3[2], c3[3]));
 
                 triangles.Add((v1, v2, v3));
 
             }
 
 
-            return Clipper.ClipTriangles(triangles);
+
+
+            var clippedVertices = Clipper.ClipTriangles(triangles);
+            // foreach (var (v1, v2, v3) in clippedVertices)
+            // {
+            //     Console.WriteLine($"invW: {v1.invW}, uvOverW: {v1.uvOverW}");                
+            //     Console.WriteLine($"invW: {v2.invW}, uvOverW: {v2.uvOverW}");                
+            //     Console.WriteLine($"invW: {v3.invW}, uvOverW: {v3.uvOverW}");                
+            // }
+
+            return clippedVertices;
+
         }
 
 

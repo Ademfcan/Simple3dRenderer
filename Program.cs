@@ -12,8 +12,10 @@ class Program
     const int WINDOW_WIDTH = 2560;
     const int WINDOW_HEIGHT = 1440;
 
-    const int RENDER_WIDTH = WINDOW_WIDTH / 2;
-    const int RENDER_HEIGHT = WINDOW_HEIGHT / 2;
+    const int downScale = 3;
+
+    const int RENDER_WIDTH = WINDOW_WIDTH / downScale;
+    const int RENDER_HEIGHT = WINDOW_HEIGHT / downScale;
 
     const int RENDER_FOV = 60;
 
@@ -62,10 +64,15 @@ class Program
             SDL_Event e;
 
             Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
-            Mesh mesh = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r=255, g = 0, b = 0, a = 255});
-            Mesh mesh2 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r=255, g = 255, b = 0, a = 120});
-            // mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
+            Mesh mesh = MeshFactory.CreateSimpleCube(1, new SDL_Color { r=255, g = 0, b = 0, a = 225});
+            Mesh mesh2 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r=0, g = 255, b = 0, a = 120});
+            Mesh mesh3 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r=0, g = 0, b = 255, a = 200});
+            mesh.Position = new Vector3(0, 0, -5);
+            mesh2.Position = new Vector3(0, 0, -6);
+            mesh3.Position = new Vector3(0, 0, -4);
+            mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
             // mesh.texture = TextureLoader.LoadBMP("Textures/brick.bmp");
+
 
             float x_off = 0;
 
@@ -119,7 +126,6 @@ class Program
                     }
                 }
 
-                var sw = Stopwatch.StartNew();
                 // Clear screen (black)
                 SDL3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL3.SDL_RenderClear(renderer);
@@ -127,18 +133,15 @@ class Program
                 camera.Position = new Vector3(camX, 0, camZ);
                 camera.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI));
 
-                mesh.Position = new Vector3(x_off, 0, -5);
-                mesh2.Position = new Vector3(x_off, 0, -7f);
-                mesh.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, objrotY);
-                // objrotY += 0.1f;
-                // x_off += 0.01f;
+                
 
+                var sw = Stopwatch.StartNew();
 
-
-                SDL_Color[,] frame = Pipeline.RenderScene(camera, [mesh, mesh2], new SDL_Color{r = 124, g= 240, b = 189, a = 255});
+                SDL_Color[,] frame = Pipeline.RenderScene(camera, [mesh, mesh2, mesh3], new SDL_Color{r = 124, g= 240, b = 189, a = 255});
 
                 sw.Stop();
-                var timeElapsed = sw.ElapsedMilliseconds;
+                Console.WriteLine("Renderer time: " + sw.ElapsedMilliseconds);
+
 
                 // Create texture once (during initialization)
                 SDL_Texture* frameTexture = SDL3.SDL_CreateTexture(renderer,
@@ -168,11 +171,12 @@ class Program
                 SDL3.SDL_RenderTexture(renderer, frameTexture, null, null);
                 SDL3.SDL_RenderPresent(renderer);
 
+              
 
 
-                Console.WriteLine("Renderer time: " + timeElapsed);
 
-                SDL3.SDL_Delay((uint)Math.Max(0, (1000 / FPS) - timeElapsed));
+
+                SDL3.SDL_Delay((uint)Math.Max(0, (1000 / FPS) - sw.ElapsedMilliseconds));
             }
 
             // Cleanup

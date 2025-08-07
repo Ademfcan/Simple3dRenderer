@@ -35,6 +35,360 @@ namespace Simple3dRenderer.Rendering
             return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
         }
 
+        // Thread-local storage for SIMD vectors to avoid allocations
+        [ThreadStatic]
+        private static Vector<float>? _threadLocalIndexOffsets;
+        
+        private static Vector<float> GetIndexOffsets()
+        {
+            if (_threadLocalIndexOffsets == null)
+            {
+                int simdWidth = Vector<float>.Count;
+                _threadLocalIndexOffsets = new Vector<float>(
+                    Enumerable.Range(0, simdWidth).Select(i => (float)i).ToArray());
+            }
+            return _threadLocalIndexOffsets.Value;
+        }
+
+        // Top-left fill rule helper:
+        // Returns true if the edge function value 'w' includes the pixel based on whether the edge is top-left.
+        // This avoids cracks by consistently deciding pixel coverage on shared edges.
+        // NEW: Multithreaded large triangle rasterizer optimized for maximum performance
+        public static void RasterizeTriangleMultithreaded(
+            Vertex v0, Vertex v1, Vertex v2,
+            SDL_Color[,] framebuffer, float[,] depthBuffer,
+            FragmentShader shader, int? threadCount = null)
+        {
+            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
+            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
+            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+
+            float area = Edge(x0, y0, x1, y1, x2, y2);
+            if (area <= 0) return;
+
+            int width = framebuffer.GetLength(1);
+            int height = framebuffer.GetLength(0);
+
+            // Calculate triangle coverage to decide threading strategy
+            float screenArea = width * height;
+            float triangleScreenCoverage = Math.Abs(area) / screenArea;
+
+            float invArea = 1.0f / area;
+
+            bool edge0IsTopLeft = IsTopLeftEdge(x1, y1, x2, y2);
+            bool edge1IsTopLeft = IsTopLeftEdge(x2, y2, x0, y0);
+            bool edge2IsTopLeft = IsTopLeftEdge(x0, y0, x1, y1);
+
+            int minX = Math.Max(0, (int)MathF.Floor(MathF.Min(x0, MathF.Min(x1, x2))));
+            int maxX = Math.Min(width - 1, (int)MathF.Ceiling(MathF.Max(x0, MathF.Max(x1, x2))));
+            int minY = Math.Max(0, (int)MathF.Floor(MathF.Min(y0, MathF.Min(y1, y2))));
+            int maxY = Math.Min(height - 1, (int)MathF.Ceiling(MathF.Max(y0, MathF.Max(y1, y2))));
+
+            int triangleHeight = maxY - minY + 1;
+            int triangleWidth = maxX - minX + 1;
+
+            // Determine optimal threading strategy based on triangle dimensions
+            int numThreads = threadCount ?? Environment.ProcessorCount;
+            numThreads = Math.Min(numThreads, triangleHeight / 4); // Don't oversplit small triangles
+
+            if (numThreads <= 1)
+            {
+                RasterizeTriangleLinear(v0, v1, v2, framebuffer, depthBuffer, shader);
+                return;
+            }
+
+            // Precompute edge derivatives for all threads
+            float dw0_dx = (y2 - y1);
+            float dw1_dx = (y0 - y2);
+            float dw2_dx = (y1 - y0);
+            float dz_dx = ((z1 - z0) * dw1_dx + (z2 - z0) * dw2_dx) * invArea;
+
+            // Choose between scanline-parallel and tile-parallel based on triangle aspect ratio
+            float aspectRatio = (float)triangleWidth / triangleHeight;
+            
+            if (aspectRatio > 4.0f || triangleHeight < numThreads * 8)
+            {
+                // Wide triangles or insufficient height: use tile-based parallelism
+                RasterizeTriangleMultithreadedTiled(
+                    v0, v1, v2, framebuffer, depthBuffer, shader, 
+                    minX, maxX, minY, maxY, invArea, 
+                    edge0IsTopLeft, edge1IsTopLeft, edge2IsTopLeft,
+                    dw0_dx, dw1_dx, dw2_dx, dz_dx, numThreads);
+            }
+            else
+            {
+                // Tall triangles: use scanline-parallel approach
+                RasterizeTriangleMultithreadedScanlines(
+                    v0, v1, v2, framebuffer, depthBuffer, shader,
+                    minX, maxX, minY, maxY, invArea,
+                    edge0IsTopLeft, edge1IsTopLeft, edge2IsTopLeft,
+                    dw0_dx, dw1_dx, dw2_dx, dz_dx, numThreads);
+            }
+        }
+
+        // Scanline-parallel rasterization for tall triangles
+        private static void RasterizeTriangleMultithreadedScanlines(
+            Vertex v0, Vertex v1, Vertex v2,
+            SDL_Color[,] framebuffer, float[,] depthBuffer,
+            FragmentShader shader,
+            int minX, int maxX, int minY, int maxY, float invArea,
+            bool edge0IsTopLeft, bool edge1IsTopLeft, bool edge2IsTopLeft,
+            float dw0_dx, float dw1_dx, float dw2_dx, float dz_dx,
+            int numThreads)
+        {
+            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
+            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
+            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+
+            int triangleHeight = maxY - minY + 1;
+            int rowsPerThread = Math.Max(1, triangleHeight / numThreads);
+
+            ParallelOptions parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = numThreads
+            };
+
+            Parallel.For(0, numThreads, parallelOptions, threadIndex =>
+            {
+                int startY = minY + threadIndex * rowsPerThread;
+                int endY = (threadIndex == numThreads - 1) 
+                    ? maxY 
+                    : Math.Min(maxY, startY + rowsPerThread - 1);
+
+                if (startY > maxY) return;
+
+                int simdWidth = Vector<float>.Count;
+                Vector<float> indexOffsets = GetIndexOffsets();
+
+                // Process assigned scanlines
+                for (int y = startY; y <= endY; y++)
+                {
+                    float py = y + 0.5f;
+
+                    // Calculate row starting values
+                    float w0_row = Edge(x1, y1, x2, y2, minX + 0.5f, py);
+                    float w1_row = Edge(x2, y2, x0, y0, minX + 0.5f, py);
+                    float w2_row = Edge(x0, y0, x1, y1, minX + 0.5f, py);
+                    float z_row = (w0_row * z0 + w1_row * z1 + w2_row * z2) * invArea;
+
+                    // SIMD processing across the scanline
+                    for (int x = minX; x <= maxX; x += simdWidth)
+                    {
+                        int remaining = Math.Min(simdWidth, maxX - x + 1);
+
+                        Vector<float> vw0 = new Vector<float>(w0_row) + indexOffsets * dw0_dx;
+                        Vector<float> vw1 = new Vector<float>(w1_row) + indexOffsets * dw1_dx;
+                        Vector<float> vw2 = new Vector<float>(w2_row) + indexOffsets * dw2_dx;
+                        Vector<float> vz = new Vector<float>(z_row) + indexOffsets * dz_dx;
+
+                        // Process pixels in SIMD batch
+                        for (int i = 0; i < remaining; i++)
+                        {
+                            float w0 = vw0[i];
+                            float w1 = vw1[i];
+                            float w2 = vw2[i];
+
+                            if (!(EdgeTest(w0, edge0IsTopLeft) &&
+                                  EdgeTest(w1, edge1IsTopLeft) &&
+                                  EdgeTest(w2, edge2IsTopLeft)))
+                                continue;
+
+                            float z = vz[i];
+                            int xi = x + i;
+
+                            // Thread-safe depth test and write
+                            float currentDepth = depthBuffer[y, xi];
+                            if (z < currentDepth)
+                            {
+                                // Use Interlocked.CompareExchange for thread-safe depth buffer updates
+                                if (Interlocked.CompareExchange(ref depthBuffer[y, xi], z, currentDepth) == currentDepth)
+                                {
+                                    float fw0 = w0 * invArea;
+                                    float fw1 = w1 * invArea;
+                                    float fw2 = w2 * invArea;
+
+                                    SDL_Color pixelColor = shader(v0, v1, v2, fw0, fw1, fw2);
+
+                                    if (pixelColor.a >= 254)
+                                    {
+                                        framebuffer[y, xi] = pixelColor;
+                                    }
+                                    else
+                                    {
+                                        // Note: Alpha blending is not thread-safe in this implementation
+                                        // For proper alpha blending in multithreaded scenarios,
+                                        // consider using atomic operations or order-independent transparency
+                                        framebuffer[y, xi] = AlphaBlend(pixelColor, framebuffer[y, xi]);
+                                    }
+                                }
+                            }
+                        }
+
+                        w0_row += dw0_dx * simdWidth;
+                        w1_row += dw1_dx * simdWidth;
+                        w2_row += dw2_dx * simdWidth;
+                        z_row += dz_dx * simdWidth;
+                    }
+                }
+            });
+        }
+
+        // Tile-parallel rasterization for wide triangles
+        private static void RasterizeTriangleMultithreadedTiled(
+            Vertex v0, Vertex v1, Vertex v2,
+            SDL_Color[,] framebuffer, float[,] depthBuffer,
+            FragmentShader shader,
+            int minX, int maxX, int minY, int maxY, float invArea,
+            bool edge0IsTopLeft, bool edge1IsTopLeft, bool edge2IsTopLeft,
+            float dw0_dx, float dw1_dx, float dw2_dx, float dz_dx,
+            int numThreads)
+        {
+            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
+            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
+            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+
+            // Adaptive tile size based on triangle dimensions
+            int triangleWidth = maxX - minX + 1;
+            int triangleHeight = maxY - minY + 1;
+            int tileSize = Math.Max(32, Math.Min(128, Math.Max(triangleWidth, triangleHeight) / (numThreads * 2)));
+
+            // Generate tile work items
+            var tiles = new List<(int startX, int endX, int startY, int endY)>();
+            
+            for (int tileY = minY; tileY <= maxY; tileY += tileSize)
+            {
+                for (int tileX = minX; tileX <= maxX; tileX += tileSize)
+                {
+                    int endX = Math.Min(tileX + tileSize - 1, maxX);
+                    int endY = Math.Min(tileY + tileSize - 1, maxY);
+                    
+                    // Quick bounding box rejection
+                    if (!IsTileIntersectsTriangle(tileX, endX, tileY, endY, x0, y0, x1, y1, x2, y2))
+                        continue;
+                        
+                    tiles.Add((tileX, endX, tileY, endY));
+                }
+            }
+
+            if (tiles.Count == 0) return;
+
+            // Process tiles in parallel
+            ParallelOptions parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = numThreads
+            };
+
+            Parallel.ForEach(tiles, parallelOptions, tile =>
+            {
+                int simdWidth = Vector<float>.Count;
+                Vector<float> indexOffsets = GetIndexOffsets();
+
+                for (int y = tile.startY; y <= tile.endY; y++)
+                {
+                    float py = y + 0.5f;
+
+                    float w0_row = Edge(x1, y1, x2, y2, tile.startX + 0.5f, py);
+                    float w1_row = Edge(x2, y2, x0, y0, tile.startX + 0.5f, py);
+                    float w2_row = Edge(x0, y0, x1, y1, tile.startX + 0.5f, py);
+                    float z_row = (w0_row * z0 + w1_row * z1 + w2_row * z2) * invArea;
+
+                    for (int x = tile.startX; x <= tile.endX; x += simdWidth)
+                    {
+                        int remaining = Math.Min(simdWidth, tile.endX - x + 1);
+
+                        Vector<float> vw0 = new Vector<float>(w0_row) + indexOffsets * dw0_dx;
+                        Vector<float> vw1 = new Vector<float>(w1_row) + indexOffsets * dw1_dx;
+                        Vector<float> vw2 = new Vector<float>(w2_row) + indexOffsets * dw2_dx;
+                        Vector<float> vz = new Vector<float>(z_row) + indexOffsets * dz_dx;
+
+                        for (int i = 0; i < remaining; i++)
+                        {
+                            float w0 = vw0[i];
+                            float w1 = vw1[i];
+                            float w2 = vw2[i];
+
+                            if (!(EdgeTest(w0, edge0IsTopLeft) &&
+                                  EdgeTest(w1, edge1IsTopLeft) &&
+                                  EdgeTest(w2, edge2IsTopLeft)))
+                                continue;
+
+                            float z = vz[i];
+                            int xi = x + i;
+
+                            float currentDepth = Volatile.Read(ref depthBuffer[y, xi]);
+                            if (z < currentDepth)
+                            {
+                                float originalDepth = Interlocked.CompareExchange(ref depthBuffer[y, xi], z, currentDepth);
+                                if (originalDepth == currentDepth)
+                                {
+                                    float fw0 = w0 * invArea;
+                                    float fw1 = w1 * invArea;
+                                    float fw2 = w2 * invArea;
+
+                                    SDL_Color pixelColor = shader(v0, v1, v2, fw0, fw1, fw2);
+
+                                    if (pixelColor.a >= 254)
+                                    {
+                                        WriteColorAtomic(framebuffer, y, xi, pixelColor);
+                                    }
+                                    else
+                                    {
+                                        WriteColorAtomicBlended(framebuffer, y, xi, pixelColor);
+                                    }
+                                }
+                            }
+                        }
+
+                        w0_row += dw0_dx * simdWidth;
+                        w1_row += dw1_dx * simdWidth;
+                        w2_row += dw2_dx * simdWidth;
+                        z_row += dz_dx * simdWidth;
+                    }
+                }
+            });
+        }
+
+        // Thread-safe color writing methods
+        private static void WriteColorAtomic(SDL_Color[,] framebuffer, int y, int x, SDL_Color color)
+        {
+            // Since SDL_Color is a small struct (4 bytes), the write should be atomic on most platforms
+            // However, for guaranteed thread safety, we could use locks or other synchronization
+            // For performance, we'll rely on the atomic nature of small struct writes in .NET
+            framebuffer[y, x] = color;
+        }
+
+        private static void WriteColorAtomicBlended(SDL_Color[,] framebuffer, int y, int x, SDL_Color srcColor)
+        {
+            // For alpha blending in multithreaded scenarios, we need more careful handling
+            // This implementation trades some accuracy for performance by avoiding locks
+            // A more robust implementation would use spinlocks or other synchronization
+            
+            SDL_Color currentColor = framebuffer[y, x];
+            SDL_Color blendedColor = AlphaBlend(srcColor, currentColor);
+            framebuffer[y, x] = blendedColor;
+            
+            // Note: There's still a race condition here between read and write
+            // For production use, consider:
+            // 1. Using order-independent transparency techniques
+            // 2. Rendering transparent objects in a separate pass
+            // 3. Using atomic operations with packed color values
+        }
+
+
+        static bool IsTileIntersectsTriangle(int tileMinX, int tileMaxX, int tileMinY, int tileMaxY,
+            float x0, float y0, float x1, float y1, float x2, float y2)
+        {
+            // Quick bounding box check
+            float triMinX = MathF.Min(x0, MathF.Min(x1, x2));
+            float triMaxX = MathF.Max(x0, MathF.Max(x1, x2));
+            float triMinY = MathF.Min(y0, MathF.Min(y1, y2));
+            float triMaxY = MathF.Max(y0, MathF.Max(y1, y2));
+
+            return !(triMaxX < tileMinX || triMinX > tileMaxX ||
+                     triMaxY < tileMinY || triMinY > tileMaxY);
+        }
+
+
         public static void RasterizeTrianglesBatchOptimized(
     IEnumerable<(Vertex v1, Vertex v2, Vertex v3)> triangles,
     SDL_Color[,] framebuffer, float[,] depthBuffer,
@@ -93,19 +447,19 @@ namespace Simple3dRenderer.Rendering
             float triangleScreenCoverage = Math.Abs(area) / screenArea;
 
             // Use different strategies based on triangle size
-            if (triangleScreenCoverage > 0.25f) // Triangle covers >25% of screen
+            if(triangleScreenCoverage > 0.30f){
+                RasterizeTriangleMultithreaded(v0, v1, v2, framebuffer, depthBuffer, shader, Environment.ProcessorCount);
+            }
+            else if (triangleScreenCoverage > 0.25f) // Triangle covers >25% of screen
             {
-                Console.WriteLine("big triangles");
                 RasterizeTriangleLinear(v0, v1, v2, framebuffer, depthBuffer, shader);
             }
             else if (triangleScreenCoverage > 0.01f) // Medium triangles
             {
-                Console.WriteLine("simd no tiles");
                 RasterizeTriangleSimdOnly(v0, v1, v2, framebuffer, depthBuffer, shader);
             }
             else // Small triangles
             {
-                Console.WriteLine("simd4");
                 RasterizeTriangleSimd4(v0, v1, v2, framebuffer, depthBuffer, shader);
             }
         }
