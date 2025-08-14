@@ -1,15 +1,16 @@
 using System.Numerics;
+using Simple3dRenderer.Rendering;
 
 namespace Simple3dRenderer.Objects
 {
-    public struct Camera(int HRes, int VRes, int Fov, float NearClip = 0.1f, float FarClip = 1e4f, Vector3 Position = default, Quaternion Rotation = default)
+    public struct Camera(int HRes, int VRes, int Fov, float NearClip = 0.1f, float FarClip = 1e4f, Vector3 Position = default, Quaternion Rotation = default) : IPerspective
     {
         public Vector3 Position = Position;   // Camera world position
         public Quaternion Rotation = Rotation;   // Rotation in radians: (Pitch, Yaw, Roll)
 
-        public float Fov = Fov;
+        public float Fov = Fov; // Field of view in degrees
         public int HRes = HRes;
-        public int VRes = VRes;        // Field of view in degrees
+        public int VRes = VRes;       
         public float AspectRatio = (float)HRes / VRes;  // Screen width / height
         public float NearClip = NearClip;
         public float FarClip = FarClip;
@@ -35,6 +36,16 @@ namespace Simple3dRenderer.Objects
                 NearClip,
                 FarClip);
                 
+        }
+
+        public int getWidth()
+        {
+            return HRes;
+        }
+
+        public int getHeight()
+        {
+            return VRes;
         }
     }
 }

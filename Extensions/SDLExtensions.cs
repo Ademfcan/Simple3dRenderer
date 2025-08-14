@@ -26,5 +26,16 @@ namespace Simple3dRenderer.Extensions
             };
         }
 
+        public static SDL_Color ScaleWNoA(SDL_Color color, float scale)
+        {
+            return new SDL_Color
+            {
+                r = (byte)(color.r * scale),
+                g = (byte)(color.g * scale),
+                b = (byte)(color.b * scale),
+                a = color.a
+            };
+        }
+
     }
 }

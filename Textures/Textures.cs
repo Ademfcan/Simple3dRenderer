@@ -1,4 +1,3 @@
-using System.IO.IsolatedStorage;
 using System.Runtime.InteropServices;
 using SDL;
 

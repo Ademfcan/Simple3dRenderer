@@ -2,23 +2,15 @@ using System.Numerics;
 using SDL;
 using Simple3dRenderer.Textures;
 using Simple3dRenderer.Objects;
-using System.Data;
 
 namespace Simple3dRenderer.Shaders
 {
-    public class TextureShader()
+    public struct TextureShader
     {
-        public Texture? texture = null;
-
-        public SDL_Color TexturedShader(
+        public static SDL_Color getPixelColor(
             Vertex v0, Vertex v1, Vertex v2,
-            float w0, float w1, float w2)
+            float w0, float w1, float w2, Texture texture)
         {
-            if (texture == null)
-            {
-                throw new ConstraintException("The texture must not be null!");
-            }
-
             // interpolate uOverW and vOverW
             Vector2 uvOverW = w0 * v0.uvOverW + w1 * v1.uvOverW + w2 * v2.uvOverW;
 
@@ -32,10 +24,10 @@ namespace Simple3dRenderer.Shaders
             uv.X = Math.Clamp(uv.X, 0.0f, 1.0f);
             uv.Y = Math.Clamp(uv.Y, 0.0f, 1.0f);
 
-            return SampleTextureFiltered(uv);
+            return SampleTextureFiltered(uv, texture);
         }
 
-        private SDL_Color SampleTextureFiltered(Vector2 uv)
+        private static SDL_Color SampleTextureFiltered(Vector2 uv, Texture texture)
         {
             // Convert UV to texture space
             float texX = uv.X * (texture.width - 1);
@@ -63,7 +55,7 @@ namespace Simple3dRenderer.Shaders
             return LerpColor(top, bottom, fy);
         }
 
-        private SDL_Color LerpColor(SDL_Color a, SDL_Color b, float t)
+        private static SDL_Color LerpColor(SDL_Color a, SDL_Color b, float t)
         {
             return new SDL_Color
             {
@@ -73,5 +65,6 @@ namespace Simple3dRenderer.Shaders
                 a = (byte)(a.a + (b.a - a.a) * t)
             };
         }
+
     }
 }

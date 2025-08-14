@@ -9,10 +9,10 @@ class Program
 {
 
 
-    const int WINDOW_WIDTH = 2560;
-    const int WINDOW_HEIGHT = 1440;
+    const int WINDOW_WIDTH = 1920;
+    const int WINDOW_HEIGHT = 1080;
 
-    const int downScale = 3;
+    const int downScale = 1;
 
     const int RENDER_WIDTH = WINDOW_WIDTH / downScale;
     const int RENDER_HEIGHT = WINDOW_HEIGHT / downScale;
@@ -22,6 +22,28 @@ class Program
     const int FPS = 60;
 
     const float MoveAmt = 0.3f;
+
+    private static Scene createScene()
+    {
+        Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
+        Mesh mesh = MeshFactory.CreateSimpleCube(1, new SDL_Color { r = 255, g = 0, b = 0, a = 255 });
+        Mesh mesh2 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r = 0, g = 255, b = 0, a = 255 });
+        Mesh mesh3 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r = 0, g = 0, b = 255, a = 255 });
+        mesh.SetPosition(new Vector3(0, 0, -5));
+        mesh2.SetPosition(new Vector3(0, 0, -6));
+        mesh3.SetPosition(new Vector3(0, 0, -4));
+
+        // PerspectiveLight light = new(RENDER_WIDTH,RENDER_HEIGHT, RENDER_FOV);
+        PerspectiveLight light = new PerspectiveLight(300,300, 30, color: new(0.5f, 0.4f, 0.2f));
+
+        mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
+
+        SDL_Color bg = new SDL_Color { r = 124, g = 240, b = 189, a = 255 };
+
+        return new Scene(camera, [mesh, mesh2, mesh3], [light], bg, new Vector3(0.5f,0.5f,0.5f));
+    }
+
+
 
     static void Main(string[] args)
     {
@@ -63,25 +85,14 @@ class Program
             bool running = true;
             SDL_Event e;
 
-            Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
-            Mesh mesh = MeshFactory.CreateSimpleCube(1, new SDL_Color { r=255, g = 0, b = 0, a = 225});
-            Mesh mesh2 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r=0, g = 255, b = 0, a = 120});
-            Mesh mesh3 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r=0, g = 0, b = 255, a = 200});
-            mesh.Position = new Vector3(0, 0, -5);
-            mesh2.Position = new Vector3(0, 0, -6);
-            mesh3.Position = new Vector3(0, 0, -4);
-            mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
-            // mesh.texture = TextureLoader.LoadBMP("Textures/brick.bmp");
-
-
-            float x_off = 0;
-
-            float objrotY = 0;
+            Scene scene = createScene();
 
             float camX = 0;
             float camZ = 0;
 
             float camrotY = 0;
+
+            float a = 0;
 
             while (running)
             {
@@ -117,9 +128,15 @@ class Program
                                 break;
                             case SDL_Keycode.SDLK_A:
                                 camrotY += 10;
+
                                 break;
                             case SDL_Keycode.SDLK_D:
                                 camrotY -= 10;
+                                break;
+                            case SDL_Keycode.SDLK_T:
+                                Console.WriteLine("Down arrow pressed");
+
+                                a += 0.5f;
                                 break;
 
                         }
@@ -130,14 +147,17 @@ class Program
                 SDL3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL3.SDL_RenderClear(renderer);
 
-                camera.Position = new Vector3(camX, 0, camZ);
-                camera.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI));
+                scene.camera.Position = new Vector3(camX, 0, camZ);
+                scene.camera.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI));
 
-                
+                // ((PerspectiveLight)scene.lights[0]).SetPosition(new Vector3(camX, 0, camZ));
+                // ((PerspectiveLight)scene.lights[0]).SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
+
+
 
                 var sw = Stopwatch.StartNew();
 
-                SDL_Color[,] frame = Pipeline.RenderScene(camera, [mesh, mesh2, mesh3], new SDL_Color{r = 124, g= 240, b = 189, a = 255});
+                SDL_Color[,] frame = Pipeline.RenderScene(scene);
 
                 sw.Stop();
                 Console.WriteLine("Renderer time: " + sw.ElapsedMilliseconds);
@@ -171,7 +191,7 @@ class Program
                 SDL3.SDL_RenderTexture(renderer, frameTexture, null, null);
                 SDL3.SDL_RenderPresent(renderer);
 
-              
+
 
 
 
