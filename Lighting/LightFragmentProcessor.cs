@@ -26,7 +26,7 @@ namespace Simple3dRenderer.Rendering
                 width = perspective.getWidth(),
                 height = perspective.getHeight(),
                 shadowMap = new DeepShadowMap(perspective.getWidth(), perspective.getHeight()),
-                wtoc = perspective.getProjectionMatrix().ToMathNet() * perspective.getViewMatrix().ToMathNet()
+                wtoc = perspective.getWToC()
             };
         }
 

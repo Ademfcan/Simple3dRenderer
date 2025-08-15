@@ -1,51 +1,125 @@
 using System.Numerics;
+using MathNet.Numerics.LinearAlgebra;
+using Simple3dRenderer.Extensions;
 using Simple3dRenderer.Rendering;
 
 namespace Simple3dRenderer.Objects
 {
-    public struct Camera(int HRes, int VRes, int Fov, float NearClip = 0.1f, float FarClip = 1e4f, Vector3 Position = default, Quaternion Rotation = default) : IPerspective
+    public class Camera : IPerspective
     {
-        public Vector3 Position = Position;   // Camera world position
-        public Quaternion Rotation = Rotation;   // Rotation in radians: (Pitch, Yaw, Roll)
+        private readonly int HRes;
+        private readonly int VRes;
 
-        public float Fov = Fov; // Field of view in degrees
-        public int HRes = HRes;
-        public int VRes = VRes;       
-        public float AspectRatio = (float)HRes / VRes;  // Screen width / height
-        public float NearClip = NearClip;
-        public float FarClip = FarClip;
+        public Vector3 Position { get; private set; } = Vector3.Zero;
+        public Quaternion Rotation { get; private set; } = Quaternion.Identity;
+        public float FovDegrees { get; private set; }
+        public float AspectRatio { get; private set; }
+        public float NearClip { get; private set; }
+        public float FarClip { get; private set; }
 
+        private Matrix4x4? cachedViewMatrix;
+        private Matrix4x4? cachedProjectionMatrix;
+        private Matrix<float>? cachedWToC;
 
-        public Matrix4x4 getViewMatrix()
+        public Camera(
+            int hRes, int vRes,
+            float fovDegrees,
+            float nearClip = 0.1f,
+            float farClip = 1e4f,
+            Vector3? position = null,
+            Quaternion? rotation = null)
         {
-            // Inverse rotation and translation to move world around camera
-            Matrix4x4 rotationMatrix = Matrix4x4.CreateFromQuaternion(Quaternion.Conjugate(Rotation));
-            Matrix4x4 translationMatrix = Matrix4x4.CreateTranslation(-Position);
+            HRes = hRes;
+            VRes = vRes;
+            AspectRatio = (float)HRes / VRes;
 
-            // View matrix is inverse of camera transform
-            // NOTE: row major means left to right order
-            return translationMatrix * rotationMatrix;
+            FovDegrees = fovDegrees;
+            NearClip = nearClip;
+            FarClip = farClip;
+
+            Position = position ?? Vector3.Zero;
+            Rotation = rotation ?? Quaternion.Identity;
+
+            InvalidateMatrices();
         }
 
-        public Matrix4x4 getProjectionMatrix()
+        public void SetPosition(Vector3 pos)
         {
-            float fovRadians = MathF.PI * Fov / 180f;
-            return Matrix4x4.CreatePerspectiveFieldOfView(
-                fovRadians,
-                AspectRatio,
-                NearClip,
-                FarClip);
+            Position = pos;
+            cachedViewMatrix = null;
+            cachedWToC = null;
+        }
+
+        public void SetRotation(Quaternion rot)
+        {
+            Rotation = rot;
+            cachedViewMatrix = null;
+            cachedWToC = null;
+        }
+
+        public void SetFieldOfView(float fovDegrees)
+        {
+            FovDegrees = fovDegrees;
+            cachedProjectionMatrix = null;
+            cachedWToC = null;
+        }
+
+        public void SetNearFarPlanes(float nearClip, float farClip)
+        {
+            NearClip = nearClip;
+            FarClip = farClip;
+            cachedProjectionMatrix = null;
+            cachedWToC = null;
+        }
+
+        private void InvalidateMatrices()
+        {
+            cachedViewMatrix = null;
+            cachedProjectionMatrix = null;
+            cachedWToC = null;
+        }
+
+        private Matrix4x4 GetViewMatrix()
+        {
+            if (cachedViewMatrix == null)
+            {
+                // Define the "forward" direction based on the camera's rotation.
+                Vector3 forward = Vector3.Transform(-Vector3.UnitZ, Rotation);
+                Vector3 target = Position + forward;
+
+                // Define the "up" direction based on the camera's rotation.
+                // In a right-handed system, up is +Y.
+                Vector3 up = Vector3.Transform(Vector3.UnitY, Rotation);
                 
+                // Create the view matrix using the built-in LookAt function.
+                cachedViewMatrix = Matrix4x4.CreateLookAt(Position, target, up);
+            }
+            return cachedViewMatrix.Value;
         }
 
-        public int getWidth()
+        private Matrix4x4 GetProjectionMatrix()
         {
-            return HRes;
+            if (cachedProjectionMatrix == null)
+            {
+                cachedProjectionMatrix = Matrix4x4.CreatePerspectiveFieldOfView(
+                    MathF.PI * FovDegrees / 180f,
+                    AspectRatio,
+                    NearClip,
+                    FarClip);
+            }
+            return cachedProjectionMatrix.Value;
         }
 
-        public int getHeight()
+        public Matrix<float> getWToC()
         {
-            return VRes;
+            if (cachedWToC == null)
+            {
+                cachedWToC = GetProjectionMatrix().ToMathNet() * GetViewMatrix().ToMathNet();
+            }
+            return cachedWToC;
         }
+
+        public int getWidth() => HRes;
+        public int getHeight() => VRes;
     }
 }

@@ -20,7 +20,7 @@ namespace Simple3dRenderer.Rendering
                 maps.Add(createShadowMap(scene.objects, light));
             }
 
-            FrameData state = FrameData.createEmpty(scene.camera.HRes, scene.camera.VRes, scene.backgroundColor, scene.ambientLight, scene.camera.Position, maps, scene.lights);
+            FrameData state = FrameData.createEmpty(scene.camera.getWidth(), scene.camera.getHeight(), scene.backgroundColor, scene.ambientLight, scene.camera.Position, maps, scene.lights);
             List<Mesh> opaques = [];
             List<Mesh> transparents = [];
 
@@ -75,15 +75,13 @@ namespace Simple3dRenderer.Rendering
           where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
           where TState : IRasterizable, ITextured
         {
-            Matrix<float> worldtoview = perspective.getViewMatrix().ToMathNet();
-            Matrix<float> viewtoclip = perspective.getProjectionMatrix().ToMathNet();
-            Matrix<float> mmtv = viewtoclip * worldtoview;
+            Matrix<float> wtoc = perspective.getWToC();
 
 
             foreach (Mesh mesh in objects)
             {
                 state.SetTexture(mesh.texture);
-                RenderMesh<TProcessor, TState>(perspective.getWidth(), perspective.getHeight(), mesh, ref state, mmtv, sortOnOpaqueNess ? mesh.IsOpaque() : null, lights);
+                RenderMesh<TProcessor, TState>(perspective.getWidth(), perspective.getHeight(), mesh, ref state, wtoc, sortOnOpaqueNess ? mesh.IsOpaque() : null, lights);
             }
 
         }
@@ -168,7 +166,7 @@ namespace Simple3dRenderer.Rendering
 
         private static void AddOptionalLightClip(ref Vertex v, List<PerspectiveLight> lights)
         {
-            v.lightClipSpaces = new Vector4[lights.Count];
+            var clipSpaces = new Vector4[lights.Count];
 
             for (int i = 0; i < lights.Count; i++)
             {
@@ -181,8 +179,10 @@ namespace Simple3dRenderer.Rendering
                 var clipVec = wtoc * worldVec;
 
                 // Store the resulting 4D clip-space vector
-                v.lightClipSpaces[i] = new Vector4(clipVec[0], clipVec[1], clipVec[2], clipVec[3]);
+                clipSpaces[i] = new Vector4(clipVec[0], clipVec[1], clipVec[2], clipVec[3]);
             }
+
+            v.setLightClipSpaces(clipSpaces);
         }
 
 
@@ -202,10 +202,10 @@ namespace Simple3dRenderer.Rendering
 
         private static void DivideByWAndTrim(ref Vertex v)
         {
-            float w = v.Position.W;
-            float x = v.Position.X, y = v.Position.Y, z = v.Position.Z;
+            float w = v.clipPosition.W;
+            float x = v.clipPosition.X, y = v.clipPosition.Y, z = v.clipPosition.Z;
 
-            v.Position = new Vector4(x / w, y / w, z / w, 1);
+            v.clipPosition = new Vector4(x / w, y / w, z / w, 1);
         }
 
 
@@ -227,11 +227,11 @@ namespace Simple3dRenderer.Rendering
         private static void ScaleVertex(ref Vertex vertex, int width, int height)
         {
 
-            float x = (vertex.Position.X + 1) * 0.5f * width;
-            float y = (1 - vertex.Position.Y) * 0.5f * height;
-            float z = vertex.Position.Z;
+            float x = (vertex.clipPosition.X + 1) * 0.5f * width;
+            float y = (1 - vertex.clipPosition.Y) * 0.5f * height;
+            float z = vertex.clipPosition.Z;
 
-            vertex.Position = new Vector4(x, y, z, 1);
+            vertex.clipPosition = new Vector4(x, y, z, 1);
         }
 
         public static void PrintMatrix(Matrix<float> matrix, string? name = null)

@@ -6,7 +6,7 @@ using Simple3dRenderer.Rendering;
 
 namespace Simple3dRenderer.Objects
 {
-    public class PerspectiveLight : ILight
+    public class PerspectiveLight : IPerspective
     {
         public Vector3 Color;        // linear 0..1
         public float Intensity;      // scalar multiplier (e.g. 1.0 = default)
@@ -40,7 +40,7 @@ namespace Simple3dRenderer.Objects
             float farPlane = 1e4f, 
             Vector3? color = null, 
             float intensity = 1f, 
-            float quadratic = 0.02f,
+            float quadratic = 0.2f,
             float innerCutoffDegrees = 30f,
             float outerCutoffDegrees = 45f)
         {
@@ -95,20 +95,25 @@ namespace Simple3dRenderer.Objects
             OuterCutoffCos = MathF.Cos(MathF.PI * outerDegrees / 180f);
         }
 
-        public Matrix4x4 getViewMatrix()
+        private Matrix4x4 getViewMatrix()
         {
             if (cachedViewMatrix == null)
             {
-                Matrix4x4 rotationMatrix = Matrix4x4.CreateFromQuaternion(Quaternion.Conjugate(Rotation));
-                Matrix4x4 translationMatrix = Matrix4x4.CreateTranslation(-Position);
+                // Define the "forward" direction based on the camera's rotation.
+                Vector3 forward = Vector3.Transform(-Vector3.UnitZ, Rotation);
+                Vector3 target = Position + forward;
 
-                // row-major multiplication order
-                cachedViewMatrix = translationMatrix * rotationMatrix;
+                // Define the "up" direction based on the camera's rotation.
+                // In a right-handed system, up is +Y.
+                Vector3 up = Vector3.Transform(Vector3.UnitY, Rotation);
+                
+                // Create the view matrix using the built-in LookAt function.
+                cachedViewMatrix = Matrix4x4.CreateLookAt(Position, target, up);
             }
             return cachedViewMatrix.Value;
         }
 
-        public Matrix4x4 getProjectionMatrix()
+        private Matrix4x4 getProjectionMatrix()
         {
             if (cachedProjectionMatrix == null)
             {

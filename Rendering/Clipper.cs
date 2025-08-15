@@ -58,13 +58,13 @@ namespace Simple3dRenderer.Rendering
 
             private static bool IsInside(Vertex v, Vector<float> plane)
             {
-                return plane[0] * v.Position.X + plane[1] * v.Position.Y + plane[2] * v.Position.Z + plane[3] * v.Position.W >= 0;
+                return plane[0] * v.clipPosition.X + plane[1] * v.clipPosition.Y + plane[2] * v.clipPosition.Z + plane[3] * v.clipPosition.W >= 0;
             }
 
             private static Vertex Intersect(Vertex a, Vertex b, Vector<float> plane)
             {
-                float da = plane[0] * a.Position.X + plane[1] * a.Position.Y + plane[2] * a.Position.Z + plane[3] * a.Position.W;
-                float db = plane[0] * b.Position.X + plane[1] * b.Position.Y + plane[2] * b.Position.Z + plane[3] * b.Position.W;
+                float da = plane[0] * a.clipPosition.X + plane[1] * a.clipPosition.Y + plane[2] * a.clipPosition.Z + plane[3] * a.clipPosition.W;
+                float db = plane[0] * b.clipPosition.X + plane[1] * b.clipPosition.Y + plane[2] * b.clipPosition.Z + plane[3] * b.clipPosition.W;
 
                 float t = da / (da - db); // robust interpolation in 4D
 

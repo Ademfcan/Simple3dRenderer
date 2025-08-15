@@ -27,20 +27,20 @@ class Program
     {
         Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
         Mesh mesh = MeshFactory.CreateSimpleCube(1, new SDL_Color { r = 255, g = 0, b = 0, a = 255 });
-        Mesh mesh2 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r = 0, g = 255, b = 0, a = 255 });
-        Mesh mesh3 = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color { r = 0, g = 0, b = 255, a = 255 });
+        Mesh mesh2 = MeshFactory.CreateCube(new Vector3(2, 1, 1), new SDL_Color { r = 0, g = 255, b = 0, a = 255 });
+        Mesh mesh3 = MeshFactory.CreateCube(new Vector3(10, 1, 10), new SDL_Color { r = 0, g = 0, b = 255, a = 255 });
         mesh.SetPosition(new Vector3(0, 0, -5));
         mesh2.SetPosition(new Vector3(0, 0, -6));
         mesh3.SetPosition(new Vector3(0, 0, -4));
 
         // PerspectiveLight light = new(RENDER_WIDTH,RENDER_HEIGHT, RENDER_FOV);
-        PerspectiveLight light = new PerspectiveLight(300,300, 30, color: new(0.5f, 0.4f, 0.2f));
+        PerspectiveLight light = new PerspectiveLight(300,300, 30, color: new(0.5f, 0.4f, 0.2f), farPlane: 3);
 
         mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
 
         SDL_Color bg = new SDL_Color { r = 124, g = 240, b = 189, a = 255 };
 
-        return new Scene(camera, [mesh, mesh2, mesh3], [light], bg, new Vector3(0.5f,0.5f,0.5f));
+        return new Scene(camera, [mesh, mesh2, mesh3], [light], ambientLight: new Vector3(0.001f,0.001f,0.001f));
     }
 
 
@@ -147,11 +147,11 @@ class Program
                 SDL3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL3.SDL_RenderClear(renderer);
 
-                scene.camera.Position = new Vector3(camX, 0, camZ);
-                scene.camera.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI));
+                scene.camera.SetPosition(new Vector3(camX, 0, camZ));
+                scene.camera.SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
-                // ((PerspectiveLight)scene.lights[0]).SetPosition(new Vector3(camX, 0, camZ));
-                // ((PerspectiveLight)scene.lights[0]).SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
+                ((PerspectiveLight)scene.lights[0]).SetPosition(new Vector3(camX, 0, camZ));
+                ((PerspectiveLight)scene.lights[0]).SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
 
 

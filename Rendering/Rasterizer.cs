@@ -57,9 +57,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y;
-            float x1 = v1.Position.X, y1 = v1.Position.Y;
-            float x2 = v2.Position.X, y2 = v2.Position.Y;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y;
 
             float area = Edge(x0, y0, x1, y1, x2, y2);
             if (area <= 0) return;
@@ -91,7 +91,7 @@ namespace Simple3dRenderer.Rendering
                 return;
             }
 
-            float z0 = v0.Position.Z, z1 = v1.Position.Z, z2 = v2.Position.Z;
+            float z0 = v0.clipPosition.Z, z1 = v1.clipPosition.Z, z2 = v2.clipPosition.Z;
 
             float dw0_dx = y2 - y1;
             float dw1_dx = y0 - y2;
@@ -133,9 +133,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
-            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
-            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y, z0 = v0.clipPosition.Z;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y, z1 = v1.clipPosition.Z;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y, z2 = v2.clipPosition.Z;
 
             int triangleHeight = maxY - minY + 1;
             int rowsPerThread = Math.Max(1, triangleHeight / numThreads);
@@ -214,9 +214,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
-            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
-            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y, z0 = v0.clipPosition.Z;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y, z1 = v1.clipPosition.Z;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y, z2 = v2.clipPosition.Z;
 
             int triangleWidth = maxX - minX + 1;
             int triangleHeight = maxY - minY + 1;
@@ -316,12 +316,12 @@ namespace Simple3dRenderer.Rendering
             {
                 if (sortFrontToBack.Value)
                 {
-                    triangles = triangles.Select(t => new { Triangle = t, AvgZ = (t.v1.Position.Z + t.v2.Position.Z + t.v3.Position.Z) / 3.0f })
+                    triangles = triangles.Select(t => new { Triangle = t, AvgZ = (t.v1.clipPosition.Z + t.v2.clipPosition.Z + t.v3.clipPosition.Z) / 3.0f })
                             .OrderBy(t => t.AvgZ) // Front to back
                             .Select(t => t.Triangle);
                 }
                 else {
-                    triangles = triangles.Select(t => new { Triangle = t, AvgZ = (t.v1.Position.Z + t.v2.Position.Z + t.v3.Position.Z) / 3.0f })
+                    triangles = triangles.Select(t => new { Triangle = t, AvgZ = (t.v1.clipPosition.Z + t.v2.clipPosition.Z + t.v3.clipPosition.Z) / 3.0f })
                              .OrderByDescending(t => t.AvgZ) // Back to front
                              .Select(t => t.Triangle);
                 }
@@ -339,9 +339,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y;
-            float x1 = v1.Position.X, y1 = v1.Position.Y;
-            float x2 = v2.Position.X, y2 = v2.Position.Y;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y;
 
             float area = Edge(x0, y0, x1, y1, x2, y2);
             if (area <= 0) return;
@@ -380,9 +380,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
-            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
-            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y, z0 = v0.clipPosition.Z;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y, z1 = v1.clipPosition.Z;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y, z2 = v2.clipPosition.Z;
 
             float area = Edge(x0, y0, x1, y1, x2, y2);
             float invArea = 1.0f / area;
@@ -448,9 +448,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
-            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
-            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y, z0 = v0.clipPosition.Z;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y, z1 = v1.clipPosition.Z;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y, z2 = v2.clipPosition.Z;
 
             float area = Edge(x0, y0, x1, y1, x2, y2);
             float invArea = 1.0f / area;
@@ -523,9 +523,9 @@ namespace Simple3dRenderer.Rendering
             where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
             where TState : IRasterizable
         {
-            float x0 = v0.Position.X, y0 = v0.Position.Y, z0 = v0.Position.Z;
-            float x1 = v1.Position.X, y1 = v1.Position.Y, z1 = v1.Position.Z;
-            float x2 = v2.Position.X, y2 = v2.Position.Y, z2 = v2.Position.Z;
+            float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y, z0 = v0.clipPosition.Z;
+            float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y, z1 = v1.clipPosition.Z;
+            float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y, z2 = v2.clipPosition.Z;
 
             float area = Edge(x0, y0, x1, y1, x2, y2);
             if (area <= 0) return;

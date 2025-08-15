@@ -125,20 +125,30 @@ namespace Simple3dRenderer.Rendering
         private static SDL_Color ShadeBlinnPhong(ref FrameData state,
             Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
         {
-            // --- 1) Base albedo (linear) ---
+             // --- 1) Base albedo (linear) ---
             SDL_Color baseSdl = T.getPixelColor(ref state, v0, v1, v2, w0, w1, w2);
-            Vector3 albedo = ColorLin.FromSDL(baseSdl);   // linear 0..1
+            Vector3 albedo = ColorLin.FromSDL(baseSdl);
 
-            // --- 2) Interpolate world position & normal ---
-            Vector4 wp4 = v0.worldPosition * w0 + v1.worldPosition * w1 + v2.worldPosition * w2;
+            // --- CORRECT: Perspective-correct interpolation ---
+            // First, interpolate invW
+            float interpolatedInvW = v0.invW * w0 + v1.invW * w1 + v2.invW * w2;
+
+            // Interpolate the pre-divided attributes
+            Vector4 worldPosOverW = v0.worldPositionOverW * w0 + v1.worldPositionOverW * w1 + v2.worldPositionOverW * w2;
+            Vector3 normalOverW = v0.normalOverW * w0 + v1.normalOverW * w1 + v2.normalOverW * w2;
+
+            // Recover the perspective-correct values by dividing by invW (or multiplying by W)
+            float interpolatedW = 1.0f / interpolatedInvW;
+            Vector4 wp4 = worldPosOverW * interpolatedW;
             Vector3 worldPos = new Vector3(wp4.X, wp4.Y, wp4.Z);
+            Vector3 N = Vector3.Normalize(normalOverW * interpolatedW);
+            // --- End of correction ---
 
-            Vector3 N = Vector3.Normalize(v0.Normal * w0 + v1.Normal * w1 + v2.Normal * w2);
-            if (float.IsNaN(N.X)) N = new Vector3(0, 0, 1); // safety
+            if (float.IsNaN(N.X)) N = new Vector3(0, 0, -1);
 
             Vector3 V = Vector3.Normalize(state.CameraPosition - worldPos);
 
-            // --- 3) Start with ambient ---
+            // ... The rest of your lighting code remains the same ...
             Vector3 accum = state.AmbientColor * albedo;
 
             int lightCount = state.lights.Count;
@@ -147,7 +157,7 @@ namespace Simple3dRenderer.Rendering
                 var Lgt = state.lights[i];
 
                 // Visibility from your deep shadow map (0..1).
-                float vis = SampleVisibilityForLight(ref state, i, v0, v1, v2, w0, w1, w2);
+                float vis = SampleVisibilityForLight(ref state, i, v0, v1, v2, w0, w1, w2, interpolatedInvW);
                 if (vis <= 0f) continue;
 
                 // Direction, distance, attenuation
@@ -182,19 +192,26 @@ namespace Simple3dRenderer.Rendering
 
         // Pull just the visibility value for a given light i using your existing math.
         private static float SampleVisibilityForLight(ref FrameData state, int lightIndex,
-            Vertex v0, Vertex v1, Vertex v2, float fw0, float fw1, float fw2)
-        {
-            // Interpolate that light’s clip-space position
-            Vector4 c0 = v0.lightClipSpaces[lightIndex];
-            Vector4 c1 = v1.lightClipSpaces[lightIndex];
-            Vector4 c2 = v2.lightClipSpaces[lightIndex];
-            Vector4 clip = c0 * fw0 + c1 * fw1 + c2 * fw2;
+         Vertex v0, Vertex v1, Vertex v2, float fw0, float fw1, float fw2, float interpolatedInvW)
 
-            // Frustum check in homogeneous clip
+        {
+            // --- CORRECT: Perspective-correct interpolation ---
+            // Interpolate that light’s pre-divided clip-space position
+            Vector4 c0_overW = v0.lightClipSpacesOverW[lightIndex];
+            Vector4 c1_overW = v1.lightClipSpacesOverW[lightIndex];
+            Vector4 c2_overW = v2.lightClipSpacesOverW[lightIndex];
+            Vector4 clipOverW = c0_overW * fw0 + c1_overW * fw1 + c2_overW * fw2;
+
+            // Recover the perspective-correct light-space clip position
+            float interpolatedW = 1.0f / interpolatedInvW;
+            Vector4 clip = clipOverW * interpolatedW;
+            // --- End of correction ---
+
+            // The rest of the function is the same
             if (!(clip.Z >= 0 && clip.Z <= clip.W &&
-                  MathF.Abs(clip.X) <= clip.W &&
-                  MathF.Abs(clip.Y) <= clip.W))
-                return 0f; // outside light frustum → no light
+                MathF.Abs(clip.X) <= clip.W &&
+                MathF.Abs(clip.Y) <= clip.W))
+                return 0f;
 
             if (clip.W == 0) return 0f;
 

@@ -40,7 +40,7 @@ namespace Simple3dRenderer.Objects
             VertexCount++;
 
             // Update local bounds
-            var p = new Vector3(v.Position.X, v.Position.Y, v.Position.Z);
+            var p = new Vector3(v.clipPosition.X, v.clipPosition.Y, v.clipPosition.Z);
             LocalBoundsMin = Vector3.Min(LocalBoundsMin, p);
             LocalBoundsMax = Vector3.Max(LocalBoundsMax, p);
 
@@ -85,7 +85,7 @@ namespace Simple3dRenderer.Objects
             WorldBoundsMax = new(float.MinValue);
 
             foreach (var v in Vertexes)
-                UpdateWorldBoundsForVertex(new Vector3(v.Position.X, v.Position.Y, v.Position.Z));
+                UpdateWorldBoundsForVertex(new Vector3(v.clipPosition.X, v.clipPosition.Y, v.clipPosition.Z));
         }
 
         public void SetPosition(Vector3 Position)
@@ -132,10 +132,10 @@ namespace Simple3dRenderer.Objects
 
             for (int i = 0; i < n; i++)
             {
-                m[0, i] = Vertexes[i].Position.X;
-                m[1, i] = Vertexes[i].Position.Y;
-                m[2, i] = Vertexes[i].Position.Z;
-                m[3, i] = Vertexes[i].Position.W;
+                m[0, i] = Vertexes[i].clipPosition.X;
+                m[1, i] = Vertexes[i].clipPosition.Y;
+                m[2, i] = Vertexes[i].clipPosition.Z;
+                m[3, i] = Vertexes[i].clipPosition.W;
             }
 
             return m;
