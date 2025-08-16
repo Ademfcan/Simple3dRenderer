@@ -10,155 +10,132 @@ namespace Simple3dRenderer.Rendering
 {
     public struct FrameFragmentProcessor<T> : IFragmentProcessor<FrameFragmentProcessor<T>, FrameData> where T : IFragmentShader<T, FrameData>
     {
-        public static void ProcessFragment(ref FrameData state, int x, int y, float z,
+         public static void ProcessFragment(ref FrameData state, int x, int y, float z,
         float fw0, float fw1, float fw2, Vertex v0, Vertex v1, Vertex v2, bool isMultithreaded)
+    {
+        if (z <= state.depthBuffer[y, x])
         {
-            // Compute final lit color once
+            SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
 
-            if (isMultithreaded)
+            // Simple alpha blend check
+            if (pixelColor.a >= 254) // Opaque fragment
             {
-                SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
-                if (pixelColor.a >= 254)
-                {
-                    float currentDepth;
-                    do
-                    {
-                        currentDepth = Volatile.Read(ref state.depthBuffer[y, x]);
-                        if (z > currentDepth) return;
-                    } while (Interlocked.CompareExchange(ref state.depthBuffer[y, x], z, currentDepth) != currentDepth);
-
-                    WriteColorAtomic(state.FrameBuffer, y, x, pixelColor);
-                }
-                else
-                {
-                    if (z < Volatile.Read(ref state.depthBuffer[y, x]))
-                        WriteColorAtomicBlended(state.FrameBuffer, y, x, pixelColor);
-                }
+                state.FrameBuffer[y, x] = pixelColor;
+                state.depthBuffer[y, x] = z;
             }
-            else if (z <= state.depthBuffer[y, x])
+            else // Transparent fragment
             {
-                SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
-                if (pixelColor.a >= 254)
-                {
-                    state.FrameBuffer[y, x] = pixelColor;
-                    state.depthBuffer[y, x] = z;
-                }
-                else
-                {
-                    state.FrameBuffer[y, x] = AlphaBlend(pixelColor, state.FrameBuffer[y, x]);
-                }
+                state.FrameBuffer[y, x] = AlphaBlend(pixelColor, state.FrameBuffer[y, x]);
+                // Note: For correct transparency, you'd typically not write to the depth buffer
+                // or you'd need order-independent transparency techniques.
             }
         }
+    }
 
-        private static SDL_Color ShadeBlinnPhong(ref FrameData state,
-            Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
+    private static SDL_Color ShadeBlinnPhong(ref FrameData state,
+        Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
+    {
+        // --- 1) Perspective-Correct Interpolation (Done ONCE) ---
+        float interpolatedInvW = v0.invW * w0 + v1.invW * w1 + v2.invW * w2;
+
+        // --- ROBUSTNESS FIX ---
+        // Prevent division by zero, which causes the flicker.
+        // If invW is near zero, it means the point is at infinity; it can't be lit.
+        if (MathF.Abs(interpolatedInvW) < 1e-6f)
         {
-             // --- 1) Base albedo (linear) ---
-            SDL_Color baseSdl = T.getPixelColor(ref state, v0, v1, v2, w0, w1, w2);
-            Vector3 albedo = ColorLin.FromSDL(baseSdl);
+            return T.getPixelColor(ref state, v0, v1, v2, w0, w1, w2); // Return unlit albedo
+        }
+        float interpolatedW = 1.0f / interpolatedInvW;
 
-            // --- CORRECT: Perspective-correct interpolation ---
-            // First, interpolate invW
-            float interpolatedInvW = v0.invW * w0 + v1.invW * w1 + v2.invW * w2;
+        // Interpolate pre-divided attributes
+        Vector4 worldPosOverW = v0.worldPositionOverW * w0 + v1.worldPositionOverW * w1 + v2.worldPositionOverW * w2;
+        Vector3 normalOverW = v0.normalOverW * w0 + v1.normalOverW * w1 + v2.normalOverW * w2;
 
-            // Interpolate the pre-divided attributes
-            Vector4 worldPosOverW = v0.worldPositionOverW * w0 + v1.worldPositionOverW * w1 + v2.worldPositionOverW * w2;
-            Vector3 normalOverW = v0.normalOverW * w0 + v1.normalOverW * w1 + v2.normalOverW * w2;
+        // Recover final attributes by multiplying by W
+        Vector3 worldPos = new Vector3(worldPosOverW.X, worldPosOverW.Y, worldPosOverW.Z) * interpolatedW;
+        Vector3 N = Vector3.Normalize(normalOverW * interpolatedW);
+        
+        // --- 2) Base Albedo & View Vector ---
+        SDL_Color baseSdl = T.getPixelColor(ref state, v0, v1, v2, w0, w1, w2);
+        Vector3 albedo = ColorLin.FromSDL(baseSdl);
+        Vector3 V = Vector3.Normalize(state.CameraPosition - worldPos);
 
-            // Recover the perspective-correct values by dividing by invW (or multiplying by W)
-            float interpolatedW = 1.0f / interpolatedInvW;
-            Vector4 wp4 = worldPosOverW * interpolatedW;
-            Vector3 worldPos = new Vector3(wp4.X, wp4.Y, wp4.Z);
-            Vector3 N = Vector3.Normalize(normalOverW * interpolatedW);
-            // --- End of correction ---
+        // --- 3) Lighting Calculation ---
+        Vector3 totalLight = state.AmbientColor * albedo;
+        int lightCount = state.lights.Count;
+        for (int i = 0; i < lightCount; i++)
+        {
+            // Pass the already-calculated W to the visibility function. This is a huge optimization.
+            float visibility = SampleVisibilityForLight(ref state, i, v0, v1, v2, w0, w1, w2, interpolatedW);
+            if (visibility <= 0.001f) continue;
 
-            if (float.IsNaN(N.X)) N = new Vector3(0, 0, -1);
+            var light = state.lights[i];
+            Vector3 lightVector = light.Position - worldPos;
+            float distSq = lightVector.LengthSquared();
+            float dist = MathF.Sqrt(distSq);
+            
+            // Normalize the light vector AFTER getting distance
+            Vector3 L = lightVector / dist;
 
-            Vector3 V = Vector3.Normalize(state.CameraPosition - worldPos);
+            // Spotlight check
+            float spotFactor = SpotFactor(in light, in L);
+            if (spotFactor <= 0.001f) continue;
 
-            // ... The rest of your lighting code remains the same ...
-            Vector3 accum = state.AmbientColor * albedo;
+            // Diffuse
+            float NdotL = MathF.Max(0f, Vector3.Dot(N, L));
 
-            int lightCount = state.lights.Count;
-            for (int i = 0; i < lightCount; i++)
-            {
-                var Lgt = state.lights[i];
+            // Specular (Blinn-Phong)
+            Vector3 H = Vector3.Normalize(L + V);
+            float NdotH = MathF.Max(0f, Vector3.Dot(N, H));
+            float specFactor = MathF.Pow(NdotH, state.Shininess); // This is still slow, but correct.
 
-                // Visibility from your deep shadow map (0..1).
-                float vis = SampleVisibilityForLight(ref state, i, v0, v1, v2, w0, w1, w2, interpolatedInvW);
-                if (vis <= 0f) continue;
+            // Combine terms
+            float attenuation = 1.0f / (1.0f + light.Quadratic * distSq);
+            Vector3 diffuse = albedo * light.Color * NdotL;
+            Vector3 specular = light.Color * state.SpecularStrength * specFactor;
 
-                // Direction, distance, attenuation
-                Vector3 L = Lgt.Position - worldPos;
-                float dist = L.Length();
-                if (dist <= 1e-6f) continue;
-                L /= dist;
-
-                float atten = 1f / (1f + Lgt.Quadratic * dist * dist);
-
-                // --- NEW: spotlight (cone) factor ---
-                float spot = SpotFactor(in Lgt, in L);
-                if (spot <= 0f) continue;
-
-                // Diffuse
-                float NdotL = MathF.Max(Vector3.Dot(N, L), 0f);
-                Vector3 diffuse = albedo * Lgt.Color * (Lgt.Intensity * NdotL);
-
-                // Blinn–Phong specular (half-vector)
-                Vector3 H = Vector3.Normalize(L + V);
-                float NdotH = MathF.Max(Vector3.Dot(N, H), 0f);
-                float specFactor = MathF.Pow(NdotH, state.Shininess);
-                Vector3 specular = Lgt.Color * (Lgt.Intensity * state.SpecularStrength * specFactor);
-
-                // Apply visibility, attenuation, and cone factor
-                accum += (diffuse + specular) * atten * vis * spot;
-            }
-
-            // --- 5) Convert back to 8-bit ---
-            return ColorLin.ToSDL(accum, baseSdl.a);
+            totalLight += (diffuse + specular) * light.Intensity * attenuation * visibility * spotFactor;
         }
 
-        // Pull just the visibility value for a given light i using your existing math.
-        private static float SampleVisibilityForLight(ref FrameData state, int lightIndex,
-         Vertex v0, Vertex v1, Vertex v2, float fw0, float fw1, float fw2, float interpolatedInvW)
+        // --- 4) Convert back to SDL_Color ---
+        return ColorLin.ToSDL(totalLight, baseSdl.a);
+    }
 
-        {
-            // --- CORRECT: Perspective-correct interpolation ---
-            // Interpolate that light’s pre-divided clip-space position
-            Vector4 c0_overW = v0.lightClipSpacesOverW[lightIndex];
-            Vector4 c1_overW = v1.lightClipSpacesOverW[lightIndex];
-            Vector4 c2_overW = v2.lightClipSpacesOverW[lightIndex];
-            Vector4 clipOverW = c0_overW * fw0 + c1_overW * fw1 + c2_overW * fw2;
+    private static float SampleVisibilityForLight(ref FrameData state, int lightIndex,
+     Vertex v0, Vertex v1, Vertex v2, float fw0, float fw1, float fw2, float interpolatedW)
+    {
+        // Interpolate that light’s pre-divided clip-space position
+        Vector4 clipOverW = v0.lightClipSpacesOverW[lightIndex] * fw0 + 
+                            v1.lightClipSpacesOverW[lightIndex] * fw1 + 
+                            v2.lightClipSpacesOverW[lightIndex] * fw2;
 
-            // Recover the perspective-correct light-space clip position
-            float interpolatedW = 1.0f / interpolatedInvW;
-            Vector4 clip = clipOverW * interpolatedW;
-            // --- End of correction ---
+        // Recover the perspective-correct light-space clip position using the pre-calculated W
+        Vector4 clip = clipOverW * interpolatedW;
 
-            // The rest of the function is the same
-            if (!(clip.Z >= 0 && clip.Z <= clip.W &&
-                MathF.Abs(clip.X) <= clip.W &&
-                MathF.Abs(clip.Y) <= clip.W))
-                return 0f;
+        // --- ROBUSTNESS FIX ---
+        // The flicker was caused by clip.W becoming 0 here.
+        // We now handle the root cause in ShadeBlinnPhong, but this check is still good practice.
+        if (MathF.Abs(clip.W) < 1e-6f) return 0f;
 
-            if (clip.W == 0) return 0f;
+        // Check if fragment is within the light's frustum (clip space check)
+        if (!(clip.Z >= 0 && clip.Z <= clip.W && MathF.Abs(clip.X) <= clip.W && MathF.Abs(clip.Y) <= clip.W))
+            return 0f;
 
-            // NDC
-            Vector3 ndc = new Vector3(clip.X / clip.W, clip.Y / clip.W, clip.Z / clip.W);
+        // Perform perspective divide to get NDC
+        Vector3 ndc = new Vector3(clip.X / clip.W, clip.Y / clip.W, clip.Z / clip.W);
 
-            // Screen coords for shadow map
-            var smap = state.maps[lightIndex];
-            float sx = (ndc.X + 1) * 0.5f * smap._width;
-            float sy = (1 - ndc.Y) * 0.5f * smap._height;
-            float sz = ndc.Z;
+        // Convert NDC to shadow map texture coordinates
+        var smap = state.maps[lightIndex];
+        float sx = (ndc.X + 1.0f) * 0.5f * smap._width;
+        float sy = (1.0f - ndc.Y) * 0.5f * smap._height;
+        float sz = ndc.Z;
 
-            if (sx < 0 || sx >= smap._width || sy < 0 || sy >= smap._height)
-                return 0f;
+        // Boundary check for the shadow map
+        if (sx < 0 || sx >= smap._width || sy < 0 || sy >= smap._height)
+            return 0f;
 
-            var vis = smap.SampleVisibility((int)sx, (int)sy, sz);
-            return vis;
-        }
-
+        return smap.SampleVisibility((int)sx, (int)sy, sz);
+    }
         private static float SpotFactor(in PerspectiveLight Lgt, in Vector3 L_unit_fromFragToLight)
         {
             // L is frag->light. Spotlight “looks” along Lgt.Direction (forward).
@@ -174,23 +151,6 @@ namespace Simple3dRenderer.Rendering
             // Optional smootherstep for a softer edge:
             // t = t * t * (3f - 2f * t);
             return Math.Clamp(t, 0f, 1f);
-        }
-
-        // Thread-safe color writing methods
-        private static void WriteColorAtomic(SDL_Color[,] framebuffer, int y, int x, SDL_Color color)
-        {
-            // Note: Struct assignment isn't truly atomic but is often sufficient.
-            // For guaranteed atomicity, one might pack the color into a uint/long and use Interlocked.
-            framebuffer[y, x] = color;
-        }
-
-        private static void WriteColorAtomicBlended(SDL_Color[,] framebuffer, int y, int x, SDL_Color srcColor)
-        {
-            // WARNING: This read-modify-write operation is not atomic and can cause race conditions.
-            // A lock or a CAS loop on the color value would be required for correctness.
-            SDL_Color currentColor = framebuffer[y, x];
-            SDL_Color blendedColor = AlphaBlend(srcColor, currentColor);
-            framebuffer[y, x] = blendedColor;
         }
 
         static SDL_Color AlphaBlend(SDL_Color src, SDL_Color dst)

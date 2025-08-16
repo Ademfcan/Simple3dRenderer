@@ -22,7 +22,7 @@ class Program
 
     const int FPS = 60;
 
-    const float MoveAmt = 1f;
+    const float MoveAmt = 2f;
 
     private static Scene createScene()
     {
