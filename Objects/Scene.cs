@@ -1,7 +1,5 @@
 using System.Numerics;
 using SDL;
-using Simple3dRenderer.Lighting;
-using Simple3dRenderer.Rendering;
 
 namespace Simple3dRenderer.Objects
 {

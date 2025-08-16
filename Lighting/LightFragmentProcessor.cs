@@ -1,7 +1,5 @@
-using System.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 using SDL;
-using Simple3dRenderer.Extensions;
 using Simple3dRenderer.Lighting;
 using Simple3dRenderer.Objects;
 using Simple3dRenderer.Textures;
@@ -45,7 +43,7 @@ namespace Simple3dRenderer.Rendering
             return texture;
         }
 
-        public void SetTexture(Texture texture)
+        public void SetTexture(Texture? texture)
         {
             this.texture = texture;
         }

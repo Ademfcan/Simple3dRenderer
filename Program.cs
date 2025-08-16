@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Diagnostics;
 using Simple3dRenderer.Rendering;
 using Simple3dRenderer.Objects;
-using Simple3dRenderer.Textures;
+using System.Runtime.Intrinsics.Arm;
 
 class Program
 {
@@ -21,26 +21,23 @@ class Program
 
     const int FPS = 60;
 
-    const float MoveAmt = 0.3f;
+    const float MoveAmt = 1f;
 
     private static Scene createScene()
     {
         Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
-        Mesh mesh = MeshFactory.CreateSimpleCube(1, new SDL_Color { r = 255, g = 0, b = 0, a = 255 });
-        Mesh mesh2 = MeshFactory.CreateCube(new Vector3(2, 1, 1), new SDL_Color { r = 0, g = 255, b = 0, a = 255 });
-        Mesh mesh3 = MeshFactory.CreateCube(new Vector3(10, 1, 10), new SDL_Color { r = 0, g = 0, b = 255, a = 255 });
-        mesh.SetPosition(new Vector3(0, 0, -5));
-        mesh2.SetPosition(new Vector3(0, 0, -6));
-        mesh3.SetPosition(new Vector3(0, 0, -4));
 
-        // PerspectiveLight light = new(RENDER_WIDTH,RENDER_HEIGHT, RENDER_FOV);
-        PerspectiveLight light = new PerspectiveLight(300,300, 30, color: new(0.5f, 0.4f, 0.2f), farPlane: 3);
+        // Mesh[] cubeWall = CubeWall.CreateCubeWall(10, 5, 1, z_init: -5);
+        Mesh cubeWall = MeshFactory.CreateCube(new Vector3(10, 5, 1), new SDL_Color{ r = 124, g = 250, b = 189, a = 255});
 
-        mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
+        // PerspectiveLight light = new PerspectiveLight(RENDER_WIDTH,RENDER_HEIGHT, RENDER_FOV, color: new(0.5f, 0.4f, 0.2f), farPlane: 10);
+        PerspectiveLight light = new PerspectiveLight(300, 300, 100, color: new(0.5f, 0.4f, 0.2f), farPlane: 20);
+
+        // mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
 
         SDL_Color bg = new SDL_Color { r = 124, g = 240, b = 189, a = 255 };
 
-        return new Scene(camera, [mesh, mesh2, mesh3], [light], ambientLight: new Vector3(0.001f,0.001f,0.001f));
+        return new Scene(camera, [cubeWall], [light], ambientLight: new Vector3(0.3f, 0.3f, 0.3f));
     }
 
 
@@ -94,8 +91,17 @@ class Program
 
             float a = 0;
 
+            Stopwatch swTotal = Stopwatch.StartNew();
+            long lastTime = swTotal.ElapsedMilliseconds;
+
             while (running)
             {
+                // Calculate deltaTime in seconds
+                long currentTime = swTotal.ElapsedMilliseconds;
+                float deltaTime = (currentTime - lastTime) / 1000f;
+                lastTime = currentTime;
+
+                // --- Event handling ---
                 while (SDL3.SDL_PollEvent(&e) != false)
                 {
                     if ((SDL_EventType)e.type == SDL_EventType.SDL_EVENT_QUIT)
@@ -106,42 +112,19 @@ class Program
                     {
                         switch (e.key.key)
                         {
-                            case SDL_Keycode.SDLK_Q:
-                                running = false;
-                                break;
-
-                            case SDL_Keycode.SDLK_LEFT:
-                                Console.WriteLine("Left arrow pressed");
-                                camX -= MoveAmt;
-                                break;
-                            case SDL_Keycode.SDLK_RIGHT:
-                                Console.WriteLine("Right arrow pressed");
-                                camX += MoveAmt;
-                                break;
-                            case SDL_Keycode.SDLK_UP:
-                                camZ -= MoveAmt;
-                                Console.WriteLine("Up arrow pressed");
-                                break;
-                            case SDL_Keycode.SDLK_DOWN:
-                                camZ += MoveAmt;
-                                Console.WriteLine("Down arrow pressed");
-                                break;
-                            case SDL_Keycode.SDLK_A:
-                                camrotY += 10;
-
-                                break;
-                            case SDL_Keycode.SDLK_D:
-                                camrotY -= 10;
-                                break;
-                            case SDL_Keycode.SDLK_T:
-                                Console.WriteLine("Down arrow pressed");
-
-                                a += 0.5f;
-                                break;
-
+                            case SDL_Keycode.SDLK_Q: running = false; break;
+                            case SDL_Keycode.SDLK_LEFT: camX -= MoveAmt * deltaTime; break;
+                            case SDL_Keycode.SDLK_RIGHT: camX += MoveAmt * deltaTime; break;
+                            case SDL_Keycode.SDLK_UP: camZ -= MoveAmt * deltaTime; break;
+                            case SDL_Keycode.SDLK_DOWN: camZ += MoveAmt * deltaTime; break;
+                            case SDL_Keycode.SDLK_A: camrotY += 90f * deltaTime; break; // degrees/sec
+                            case SDL_Keycode.SDLK_D: camrotY -= 90f * deltaTime; break;
+                            case SDL_Keycode.SDLK_2: a += 0.5f * deltaTime; break;
+                            case SDL_Keycode.SDLK_1: a -= 0.5f * deltaTime; break;
                         }
                     }
                 }
+
 
                 // Clear screen (black)
                 SDL3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -153,6 +136,7 @@ class Program
                 ((PerspectiveLight)scene.lights[0]).SetPosition(new Vector3(camX, 0, camZ));
                 ((PerspectiveLight)scene.lights[0]).SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
+                ((PerspectiveLight)scene.lights[0]).setQuadratic(a);
 
 
                 var sw = Stopwatch.StartNew();

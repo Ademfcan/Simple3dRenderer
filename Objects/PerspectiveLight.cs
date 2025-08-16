@@ -1,7 +1,6 @@
 using System.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 using Simple3dRenderer.Extensions;
-using Simple3dRenderer.Lighting;
 using Simple3dRenderer.Rendering;
 
 namespace Simple3dRenderer.Objects
@@ -34,13 +33,13 @@ namespace Simple3dRenderer.Objects
         private Matrix<float>? cachedWToC;
 
         public PerspectiveLight(
-            int HRes, int VRes, 
-            float fovDegrees, 
-            float nearPlane = 0.01f, 
-            float farPlane = 1e4f, 
-            Vector3? color = null, 
-            float intensity = 1f, 
-            float quadratic = 0.2f,
+            int HRes, int VRes,
+            float fovDegrees,
+            float nearPlane = 0.01f,
+            float farPlane = 1e4f,
+            Vector3? color = null,
+            float intensity = 1f,
+            float quadratic = 0.4f,
             float innerCutoffDegrees = 30f,
             float outerCutoffDegrees = 45f)
         {
@@ -106,7 +105,7 @@ namespace Simple3dRenderer.Objects
                 // Define the "up" direction based on the camera's rotation.
                 // In a right-handed system, up is +Y.
                 Vector3 up = Vector3.Transform(Vector3.UnitY, Rotation);
-                
+
                 // Create the view matrix using the built-in LookAt function.
                 cachedViewMatrix = Matrix4x4.CreateLookAt(Position, target, up);
             }
@@ -142,6 +141,11 @@ namespace Simple3dRenderer.Objects
                 cachedWToC = getProjectionMatrix().ToMathNet() * getViewMatrix().ToMathNet();
             }
             return cachedWToC;
+        }
+
+        public void setQuadratic(float quadratic)
+        {
+            Quadratic = quadratic;
         }
     }
 }

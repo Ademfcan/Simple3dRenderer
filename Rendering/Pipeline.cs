@@ -45,9 +45,6 @@ namespace Simple3dRenderer.Rendering
             RasterizeScene<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(scene.camera, opaques, ref state, false, scene.lights);
             RasterizeScene<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(scene.camera, transparents, ref state, true, scene.lights);
 
-
-            Console.WriteLine(state.w);
-
             return state.frameBuffer;
             // return maps[0].ToColorArray();
         }

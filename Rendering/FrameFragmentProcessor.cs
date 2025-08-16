@@ -1,6 +1,4 @@
 using System.Numerics;
-using MathNet.Numerics.LinearAlgebra;
-using Microsoft.VisualBasic;
 using SDL;
 using Simple3dRenderer.Extensions;
 using Simple3dRenderer.Lighting;
@@ -22,8 +20,6 @@ namespace Simple3dRenderer.Rendering
         public float[,] depthBuffer;
 
         public Texture? currentTexture;
-
-        public int w;
 
         public Vector3 AmbientColor;          // linear 0..1 (e.g. new(0.03f))
         public Vector3 CameraPosition;        // world space camera position
@@ -74,7 +70,7 @@ namespace Simple3dRenderer.Rendering
             return currentTexture;
         }
 
-        public void SetTexture(Texture texture)
+        public void SetTexture(Texture? texture)
         {
             currentTexture = texture;
         }
@@ -227,7 +223,8 @@ namespace Simple3dRenderer.Rendering
             if (sx < 0 || sx >= smap._width || sy < 0 || sy >= smap._height)
                 return 0f;
 
-            return smap.SampleVisibility((int)sx, (int)sy, sz); // expected 0..1 (handles transparency if you do)
+            var vis = smap.SampleVisibility((int)sx, (int)sy, sz);
+            return vis;
         }
 
         private static float SpotFactor(in PerspectiveLight Lgt, in Vector3 L_unit_fromFragToLight)

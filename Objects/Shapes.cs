@@ -115,10 +115,10 @@ namespace Simple3dRenderer.Objects
 
             foreach (var face in faces)
             {
-                var v0 = new Vertex(positions[face.indices[0]], new SDL_Color{r = 10, g = 150, b = 160, a = 255}, uvs[0], face.normal);
-                var v1 = new Vertex(positions[face.indices[1]], new SDL_Color{r = 100, g = 150, b = 160, a = 255}, uvs[1], face.normal);
-                var v2 = new Vertex(positions[face.indices[2]], new SDL_Color{r = 10, g = 2, b = 60, a = 255}, uvs[2], face.normal);
-                var v3 = new Vertex(positions[face.indices[3]], new SDL_Color{r = 150, g = 0, b = 160, a = 255}, uvs[3], face.normal);
+                var v0 = new Vertex(positions[face.indices[0]], new SDL_Color{r = c.r, g = c.g, b = c.b, a = c.a}, uvs[0], face.normal);
+                var v1 = new Vertex(positions[face.indices[1]], new SDL_Color{r = c.r, g = c.g, b = c.b, a = c.a}, uvs[1], face.normal);
+                var v2 = new Vertex(positions[face.indices[2]], new SDL_Color{r = c.r, g = c.g, b = c.b, a = c.a}, uvs[2], face.normal);
+                var v3 = new Vertex(positions[face.indices[3]], new SDL_Color{r = c.r, g = c.g, b = c.b, a = c.a}, uvs[3], face.normal);
 
                 // Two triangles per face
                 mesh.AddTriangle(v0, v1, v2);

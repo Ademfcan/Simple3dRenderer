@@ -1,4 +1,3 @@
-using System.Numerics;
 using MathNet.Numerics.LinearAlgebra;
 
 namespace Simple3dRenderer.Rendering

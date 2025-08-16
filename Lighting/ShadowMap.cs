@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using SDL;
 
 namespace Simple3dRenderer.Lighting
@@ -34,12 +32,20 @@ namespace Simple3dRenderer.Lighting
         public readonly int _height;
         private readonly float _compressionEpsilon;
 
-        public DeepShadowMap(int width, int height, float compressionEpsilon = 0.125f)
+        // Fields for per-axis bias
+        private readonly float _constBias;
+
+        public DeepShadowMap(int width, int height, float compressionEpsilon = 0.0125f)
         {
             _width = width;
             _height = height;
             _compressionEpsilon = compressionEpsilon;
             _pixels = new VisibilityFunction[_height, _width]; // row-major
+
+            // Per-axis constant bias in texel space
+            var _constBiasX = 0.5f / width;   // half a texel in X
+            var _constBiasY = 0.5f / height;  // half a texel in Y
+            _constBias = Math.Max(_constBiasX, _constBiasY);
 
             for (int y = 0; y < _height; y++)
             {
@@ -102,24 +108,22 @@ namespace Simple3dRenderer.Lighting
             }
         }
 
-        public float SampleVisibility(int x, int y, float z, float bias = 0.05f)
+        public float SampleVisibility(int x, int y, float z)
         {
             var vf = _pixels[y, x];
 
-            // Console.WriteLine(z + " " + vf.OpaqueDepth.Value);
-
-
-            float adjustedZ = z - bias;
+            float adjustedZ = z - _constBias;
 
             if (vf.OpaqueDepth.HasValue && adjustedZ >= vf.OpaqueDepth.Value)
                 return 0f;
 
-
             return vf.Points.Count <= 25 ? SampleLinear(vf.Points, adjustedZ) : SampleBinary(vf.Points, adjustedZ);
         }
 
+
         private static float SampleLinear(List<VisibilityPoint> points, float z)
         {
+
             for (int i = 1; i < points.Count; i++)
                 if (points[i].Depth > z)
                     return points[i - 1].Visibility;
