@@ -8,74 +8,6 @@ using Simple3dRenderer.Textures;
 
 namespace Simple3dRenderer.Rendering
 {
-    public struct FrameData : IRasterizable, ITextured
-    {
-        public List<DeepShadowMap> maps;
-        public List<PerspectiveLight> lights;
-
-        private int width;
-        private int height;
-
-        public SDL_Color[,] frameBuffer;
-        public float[,] depthBuffer;
-
-        public Texture? currentTexture;
-
-        public Vector3 AmbientColor;          // linear 0..1 (e.g. new(0.03f))
-        public Vector3 CameraPosition;        // world space camera position
-        public float SpecularStrength;        // e.g. 0.5f
-        public float Shininess;               // e.g. 32..128
-
-
-        public static FrameData createEmpty(int width, int height, SDL_Color backgroundColor, Vector3 ambientLight, Vector3 CameraPos, List<DeepShadowMap> maps, List<PerspectiveLight> lights)
-        {
-            FrameData data = new FrameData()
-            {
-                width = width,
-                height = height,
-                frameBuffer = new SDL_Color[height, width],
-                depthBuffer = new float[height, width],
-                maps = maps,
-                lights = lights,
-                AmbientColor = ambientLight,
-                CameraPosition = CameraPos,
-                SpecularStrength = 1f,
-                Shininess = 250
-            };
-
-            for (int i = 0; i < height; i++)
-            {
-                for (int j = 0; j < width; j++)
-                {
-                    data.depthBuffer[i, j] = float.MaxValue;
-                    data.frameBuffer[i, j] = backgroundColor;
-                }
-            }
-
-            return data;
-        }
-
-        public int getHeight()
-        {
-            return height;
-        }
-
-        public int getWidth()
-        {
-            return width;
-        }
-
-        public Texture? GetTexture()
-        {
-            return currentTexture;
-        }
-
-        public void SetTexture(Texture? texture)
-        {
-            currentTexture = texture;
-        }
-    }
-
     public struct FrameFragmentProcessor<T> : IFragmentProcessor<FrameFragmentProcessor<T>, FrameData> where T : IFragmentShader<T, FrameData>
     {
         public static void ProcessFragment(ref FrameData state, int x, int y, float z,
@@ -95,12 +27,12 @@ namespace Simple3dRenderer.Rendering
                         if (z > currentDepth) return;
                     } while (Interlocked.CompareExchange(ref state.depthBuffer[y, x], z, currentDepth) != currentDepth);
 
-                    WriteColorAtomic(state.frameBuffer, y, x, pixelColor);
+                    WriteColorAtomic(state.FrameBuffer, y, x, pixelColor);
                 }
                 else
                 {
                     if (z < Volatile.Read(ref state.depthBuffer[y, x]))
-                        WriteColorAtomicBlended(state.frameBuffer, y, x, pixelColor);
+                        WriteColorAtomicBlended(state.FrameBuffer, y, x, pixelColor);
                 }
             }
             else if (z <= state.depthBuffer[y, x])
@@ -108,12 +40,12 @@ namespace Simple3dRenderer.Rendering
                 SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
                 if (pixelColor.a >= 254)
                 {
-                    state.frameBuffer[y, x] = pixelColor;
+                    state.FrameBuffer[y, x] = pixelColor;
                     state.depthBuffer[y, x] = z;
                 }
                 else
                 {
-                    state.frameBuffer[y, x] = AlphaBlend(pixelColor, state.frameBuffer[y, x]);
+                    state.FrameBuffer[y, x] = AlphaBlend(pixelColor, state.FrameBuffer[y, x]);
                 }
             }
         }

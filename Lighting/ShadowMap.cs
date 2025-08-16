@@ -219,5 +219,66 @@ namespace Simple3dRenderer.Lighting
 
             return colors;
         }
+
+        /// <summary>
+        /// Resets the shadow map to its initial state, clearing all accumulated visibility points.
+        /// This is the correct "reset" method to be called between frames or for reusing a local tile map.
+        /// </summary>
+        public void Clear()
+        {
+            for (int y = 0; y < _height; y++)
+            {
+                for (int x = 0; x < _width; x++)
+                {
+                    // Reset each pixel's visibility function to its default state:
+                    // a single point at the start representing full visibility, and no opaque depth.
+                    _pixels[y, x] = new VisibilityFunction(
+                        new List<VisibilityPoint> { new VisibilityPoint { Depth = 0f, Visibility = 1f } },
+                        null
+                    );
+                }
+            }
+        }
+
+        public void MergeFrom(DeepShadowMap sourceTile, int offsetX, int offsetY)
+        {
+            for (int y = 0; y < sourceTile._height; y++)
+            {
+                for (int x = 0; x < sourceTile._width; x++)
+                {
+                    int destX = x + offsetX;
+                    int destY = y + offsetY;
+
+                    // Ensure the destination pixel is within the bounds of the main map
+                    if (destX < 0 || destX >= _width || destY < 0 || destY >= _height) continue;
+
+                    var sourceVf = sourceTile._pixels[y, x];
+
+                    // If the source tile has no new information for this pixel, skip it.
+                    if (sourceVf.Points.Count <= 1 && !sourceVf.OpaqueDepth.HasValue) continue;
+
+                    var destVf = this._pixels[destY, destX]; // This is a struct, so it's a copy
+
+                    // Merge the opaque depth. The new depth is the minimum of the two.
+                    if (sourceVf.OpaqueDepth.HasValue)
+                    {
+                        if (!destVf.OpaqueDepth.HasValue || sourceVf.OpaqueDepth.Value < destVf.OpaqueDepth.Value)
+                        {
+                            destVf.OpaqueDepth = sourceVf.OpaqueDepth.Value;
+                        }
+                    }
+
+                    // Merge the visibility points. We add all points from the source *except* its
+                    // default initial point at depth 0, as the destination already has one.
+                    if (sourceVf.Points.Count > 1)
+                    {
+                        destVf.Points.AddRange(sourceVf.Points.Skip(1));
+                    }
+
+                    // Since VisibilityFunction is a struct, we must write the modified copy back.
+                    this._pixels[destY, destX] = destVf;
+                }
+            }
+        }
     }
 }

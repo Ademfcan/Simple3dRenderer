@@ -1,280 +1,242 @@
 using System.Numerics;
+using System.Collections.Generic;
+using System.Linq;
 using MathNet.Numerics.LinearAlgebra;
 using SDL;
 using Simple3dRenderer.Objects;
-using Simple3dRenderer.Extensions;
 using Simple3dRenderer.Textures;
 using Simple3dRenderer.Lighting;
-
+using Simple3dRenderer.Extensions;
 
 namespace Simple3dRenderer.Rendering
 {
-    public static class Pipeline
+    public class Pipeline
     {
-        public static SDL_Color[,] RenderScene(Scene scene)
+        private struct TriangleBatch
         {
-            List<DeepShadowMap> maps = [];
+            public Texture? Texture;
+            public List<(Vertex v1, Vertex v2, Vertex v3)> Triangles;
+        }
 
-            foreach (IPerspective light in scene.lights)
+        // --- PERMANENT, REUSABLE OBJECTS ---
+        private readonly StateWrapper<FrameData> _mainFrameDataWrapper;
+        private readonly TiledRasterizer<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData> _mainRasterizer;
+        private readonly TiledRasterizer<DepthPrePassProcessor, FrameData> _depthRasterizer;
+
+        // Pool of resources for shadow mapping
+        private readonly List<StateWrapper<LightData>> _lightDataWrappers;
+        private readonly List<TiledRasterizer<LightFragmentProcessor<MaterialShader<LightData>>, LightData>> _shadowRasterizers;
+        private readonly List<DeepShadowMap> _reusableShadowMapsList;
+
+        private readonly List<PerspectiveLight> lights;
+
+        public Pipeline(int screenWidth, int screenHeight, List<PerspectiveLight> lights)
+        {
+            // 1. Create the main render target and its associated rasterizers
+            var frameData = FrameData.Create(screenWidth, screenHeight);
+            _mainFrameDataWrapper = new StateWrapper<FrameData> { State = frameData };
+            _mainRasterizer = new TiledRasterizer<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(screenWidth, screenHeight, _mainFrameDataWrapper);
+            _depthRasterizer = new TiledRasterizer<DepthPrePassProcessor, FrameData>(screenWidth, screenHeight, _mainFrameDataWrapper);
+
+            // 2. Pre-allocate a pool of resources for shadow mapping based on the provided lights.
+            int numLights = lights.Count;
+            _lightDataWrappers = new List<StateWrapper<LightData>>(numLights);
+            _shadowRasterizers = new List<TiledRasterizer<LightFragmentProcessor<MaterialShader<LightData>>, LightData>>(numLights);
+            _reusableShadowMapsList = new List<DeepShadowMap>(numLights);
+
+            this.lights = lights;
+
+            foreach (var light in lights)
             {
-                maps.Add(createShadowMap(scene.objects, light));
+                var lightData = LightData.Create(light.getWidth(), light.getHeight());
+                var lightDataWrapper = new StateWrapper<LightData> { State = lightData };
+
+                _lightDataWrappers.Add(lightDataWrapper);
+                _shadowRasterizers.Add(new TiledRasterizer<LightFragmentProcessor<MaterialShader<LightData>>, LightData>(light.getWidth(), light.getHeight(), lightDataWrapper));
+            }
+        }
+
+        public SDL_Color[,] RenderScene(Scene scene)
+        {
+            // --- 1. SHADOW MAPPING PASS ---
+            _reusableShadowMapsList.Clear();
+            // Important: Use the pipeline's configured lights, not scene.lights,
+            // as the resources were allocated based on them.
+            for (int i = 0; i < _lightDataWrappers.Count; i++)
+            {
+                // This assumes the i-th light in the scene corresponds to the i-th allocated resource.
+                // A more robust system might use a dictionary lookup if lights can be added/removed dynamically.
+                _reusableShadowMapsList.Add(CreateShadowMapForLight(scene.objects, lights[i], i));
             }
 
-            FrameData state = FrameData.createEmpty(scene.camera.getWidth(), scene.camera.getHeight(), scene.backgroundColor, scene.ambientLight, scene.camera.Position, maps, scene.lights);
-            List<Mesh> opaques = [];
-            List<Mesh> transparents = [];
+            // --- 2. PREPARE MAIN RENDER STATE ---
+            // Simplified struct modification: Because State is a public field, we can modify it directly.
+            _mainFrameDataWrapper.State.Reset();
+            _mainFrameDataWrapper.State.InitFrame(scene, _reusableShadowMapsList, lights);
 
-            foreach (Mesh mesh in scene.objects)
+            // --- 3. BATCH & PROCESS GEOMETRY ---
+            var opaques = scene.objects.Where(m => m.IsOpaque()).ToList();
+            var transparents = scene.objects.Where(m => !m.IsOpaque()).ToList();
+
+            var opaqueBatches = ProcessAndBatchSceneObjects(opaques, scene.camera, lights);
+            var transparentBatches = ProcessAndBatchSceneObjects(transparents, scene.camera, lights);
+
+            // --- 4. RENDER PASSES ---
+            // A) Optional Depth Pre-Pass
+            if (opaques.Count > 25 || lights.Count > 0)
             {
-                if (mesh.IsOpaque())
+                var allOpaqueTriangles = opaqueBatches.SelectMany(b => b.Triangles);
+                _depthRasterizer.Render(allOpaqueTriangles);
+                // Rasterizer.RasterizeTrianglesBatchOptimized<DepthPrePassProcessor, FrameData>(ref _mainFrameDataWrapper.State, allOpaqueTriangles, null);
+            }
+
+            // B) Opaque Color Pass
+            var sortedOpaqueBatches = opaqueBatches.OrderBy(b => b.Triangles.Any() ? b.Triangles.Average(t => (t.v1.clipPosition.Z + t.v2.clipPosition.Z + t.v3.clipPosition.Z) / 3f) : 1.0f);
+            foreach (var batch in sortedOpaqueBatches)
+            {
+                // Simplified struct modification
+                _mainFrameDataWrapper.State.SetTexture(batch.Texture);
+                _mainRasterizer.Render(batch.Triangles);
+                // Rasterizer.RasterizeTrianglesBatchOptimized<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(ref _mainFrameDataWrapper.State, batch.Triangles, null);
+
+            }
+
+            // C) Transparent Color Pass
+            var sortedTransparentBatches = transparentBatches.OrderByDescending(b => b.Triangles.Any() ? b.Triangles.Average(t => (t.v1.clipPosition.Z + t.v2.clipPosition.Z + t.v3.clipPosition.Z) / 3f) : -1.0f);
+            foreach (var batch in sortedTransparentBatches)
+            {
+                // Simplified struct modification
+                _mainFrameDataWrapper.State.SetTexture(batch.Texture);
+                _mainRasterizer.Render(batch.Triangles);
+                // Rasterizer.RasterizeTrianglesBatchOptimized<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(ref _mainFrameDataWrapper.State, batch.Triangles, null);
+            }
+
+            return _mainFrameDataWrapper.State.FrameBuffer;
+        }
+
+        private DeepShadowMap CreateShadowMapForLight(List<Mesh> objects, PerspectiveLight light, int lightIndex)
+        {
+            var lightDataWrapper = _lightDataWrappers[lightIndex];
+            var shadowRasterizer = _shadowRasterizers[lightIndex];
+
+            // Here you would update the perspective matrix if the light moves/rotates.
+            // lightDataWrapper.State.wtoc = light.getWToC(); // Needs a public setter on LightData
+
+            var allTrianglesForLight = ProcessAndBatchSceneObjects(objects, light, null).SelectMany(b => b.Triangles);
+
+            // The rasterizer's Render call will clear the shadow map data for this frame.
+            lightDataWrapper.State.Reset();
+            shadowRasterizer.Render(allTrianglesForLight);
+
+
+            // Rasterizer.RasterizeTrianglesBatchOptimized<LightFragmentProcessor<MaterialShader<LightData>>, LightData>(ref lightDataWrapper.State, allTrianglesForLight, null);
+
+            // Finalize this light's shadow map for sampling.
+            lightDataWrapper.State.shadowMap.Initialize();
+
+            return lightDataWrapper.State.shadowMap;
+        }
+
+        // --- Static Geometry Processing Helpers ---
+        private static readonly object s_nullTextureKey = new object();
+
+        private static List<TriangleBatch> ProcessAndBatchSceneObjects(List<Mesh> objects, IPerspective perspective, List<PerspectiveLight>? lights)
+        {
+            // 1. Change the dictionary's key type from Texture? to object.
+            var batches = new Dictionary<object, List<(Vertex, Vertex, Vertex)>>();
+            var wtoc = perspective.getWToC();
+
+            foreach (var mesh in objects)
+            {
+                // 2. Use the null-coalescing operator (??) to substitute our sentinel key when mesh.texture is null.
+                object key = mesh.texture ?? s_nullTextureKey;
+
+                // This is a more efficient way to get or create the list in a dictionary.
+                if (!batches.TryGetValue(key, out var triangleList))
                 {
-                    opaques.Add(mesh);
+                    triangleList = new List<(Vertex, Vertex, Vertex)>();
+                    batches[key] = triangleList;
                 }
-                else
+
+                var meshTriangles = new List<(Vertex v1, Vertex v2, Vertex v3)>();
+
+                // --- The rest of your geometry processing logic is PERFECT and remains unchanged ---
+                var vertexes = mesh.GetVertexMatrix();
+                var objecttoworld = mesh.GetModelMatrix().ToMathNet();
+                var worldVertexes = objecttoworld * vertexes;
+                var clipVertexes = wtoc * worldVertexes;
+
+                foreach (var (i1, i2, i3) in mesh.indices)
                 {
-                    transparents.Add(mesh);
+                    var c1 = clipVertexes.Column(i1); var w1 = worldVertexes.Column(i1);
+                    var c2 = clipVertexes.Column(i2); var w2 = worldVertexes.Column(i2);
+                    var c3 = clipVertexes.Column(i3); var w3 = worldVertexes.Column(i3);
+
+                    var v1 = mesh.Vertexes[i1]; v1.PreClipInit(new Vector4(c1[0], c1[1], c1[2], c1[3]), new Vector4(w1[0], w1[1], w1[2], w1[3]));
+                    var v2 = mesh.Vertexes[i2]; v2.PreClipInit(new Vector4(c2[0], c2[1], c2[2], c2[3]), new Vector4(w2[0], w2[1], w2[2], w2[3]));
+                    var v3 = mesh.Vertexes[i3]; v3.PreClipInit(new Vector4(c3[0], c3[1], c3[2], c3[3]), new Vector4(w3[0], w3[1], w3[2], w3[3]));
+                    meshTriangles.Add((v1, v2, v3));
                 }
+                var clippedTriangles = Clipper.ClipTriangles(meshTriangles);
+
+                if (lights != null) AddOptionalLightClips(clippedTriangles, lights);
+                ApplyPerspectiveDivideAndScreenTransform(clippedTriangles, perspective.getWidth(), perspective.getHeight());
+
+                // Add the processed triangles to the correct batch list.
+                triangleList.AddRange(clippedTriangles);
             }
 
-            if (opaques.Count > 100 || scene.lights.Count > 0)
+            // 3. Convert the dictionary back to the final list of TriangleBatch.
+            //    Here, we check for our sentinel key and convert it back to a null texture.
+            var triangles = batches.Select(kvp => new TriangleBatch
             {
-                // make use of depth pre pass
-                RasterizeScene<DepthPrePassProcessor, FrameData>(scene.camera, opaques, ref state, false);
-            }
+                Texture = (kvp.Key == s_nullTextureKey) ? null : (Texture)kvp.Key,
+                Triangles = kvp.Value
+            }).ToList();
 
-            RasterizeScene<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(scene.camera, opaques, ref state, false, scene.lights);
-            RasterizeScene<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(scene.camera, transparents, ref state, true, scene.lights);
-
-            return state.frameBuffer;
-            // return maps[0].ToColorArray();
+            return triangles;
         }
 
-        public static DeepShadowMap createShadowMap(List<Mesh> objects, IPerspective perspective)
+        private static void AddOptionalLightClips(List<(Vertex v1, Vertex v2, Vertex v3)> triangles, List<PerspectiveLight> lights)
         {
-        
-            LightData lightData = LightData.create(perspective);
-
-            RasterizeScene<LightFragmentProcessor<MaterialShader<LightData>>, LightData>(perspective, objects, ref lightData, false);
-
-            lightData.shadowMap.Initialize();
-
-            return lightData.shadowMap;
-        }
-
-        public static void RasterizeScene<TProcessor, TState>
-     (
-         IPerspective perspective,
-         List<Mesh> objects,
-         ref TState state,
-         bool sortOnOpaqueNess,
-         List<PerspectiveLight>? lights = null
-      )
-          where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
-          where TState : IRasterizable, ITextured
-        {
-            Matrix<float> wtoc = perspective.getWToC();
-
-
-            foreach (Mesh mesh in objects)
+            for (int i = 0; i < triangles.Count; i++)
             {
-                state.SetTexture(mesh.texture);
-                RenderMesh<TProcessor, TState>(perspective.getWidth(), perspective.getHeight(), mesh, ref state, wtoc, sortOnOpaqueNess ? mesh.IsOpaque() : null, lights);
-            }
-
-        }
-
-        private static void RenderMesh<TProcessor, TState>
-        (int width, int height, Mesh mesh, ref TState state, Matrix<float> wtoc, bool? sortFrontToBack, List<PerspectiveLight>? lights = null)
-        where TProcessor : struct, IFragmentProcessor<TProcessor, TState>
-            where TState : IRasterizable
-        {
-            Matrix<float> vertexes = mesh.GetVertexMatrix();
-            Matrix<float> objecttoworld = mesh.GetModelMatrix().ToMathNet();
-
-            Matrix<float> worldVertexes = objecttoworld * vertexes;
-
-            Matrix<float> clipVertexes = wtoc * worldVertexes;
-
-            var triangles = FilterClipVertexes(clipVertexes, worldVertexes, mesh.Vertexes, mesh.indices);
-
-            if (lights != null)
-                AddOptionalLightClips(triangles, lights);
-
-            ApplyPerspectiveDivide(triangles);
-            NdcToScreen(triangles, width, height);
-
-            Rasterizer.RasterizeTrianglesBatchOptimized<TProcessor, TState>(ref state, triangles, sortFrontToBack);
-        }
-
-
-
-
-
-        private static List<(Vertex v1, Vertex v2, Vertex v3)> FilterClipVertexes(Matrix<float> ClipVertexes, Matrix<float> WorldVertexes, List<Vertex> originalVerteces, List<(int, int, int)> indexes)
-        {
-            var triangles = new List<(Vertex v1, Vertex v2, Vertex v3)>();
-
-            foreach ((int i1, int i2, int i3) in indexes)
-            {
-                Vertex v1 = originalVerteces[i1];
-                Vertex v2 = originalVerteces[i2];
-                Vertex v3 = originalVerteces[i3];
-
-                // update position
-                var c1 = ClipVertexes.Column(i1);
-                var w1 = WorldVertexes.Column(i1);
-                v1.PreClipInit(new Vector4(c1[0], c1[1], c1[2], c1[3]),
-                                new Vector4(w1[0], w1[1], w1[2], w1[3]));
-
-                // update position
-                var c2 = ClipVertexes.Column(i2);
-                var w2 = WorldVertexes.Column(i2);
-                v2.PreClipInit(new Vector4(c2[0], c2[1], c2[2], c2[3]),
-                                new Vector4(w2[0], w2[1], w2[2], w2[3]));
-
-                // update position
-                var c3 = ClipVertexes.Column(i3);
-                var w3 = WorldVertexes.Column(i3);
-                v3.PreClipInit(new Vector4(c3[0], c3[1], c3[2], c3[3]),
-                                new Vector4(w3[0], w3[1], w3[2], w3[3]));
-                triangles.Add((v1, v2, v3));
-
-            }
-
-            var clippedVertices = Clipper.ClipTriangles(triangles);
-
-            return clippedVertices;
-
-        }
-
-
-        private static void AddOptionalLightClips(List<(Vertex v1, Vertex v2, Vertex v3)> vertexes, List<PerspectiveLight> lights) {
-            for (int i = 0; i < vertexes.Count; i++)
-            {
-                var (v1, v2, v3) = vertexes[i];
-
+                var (v1, v2, v3) = triangles[i];
                 AddOptionalLightClip(ref v1, lights);
                 AddOptionalLightClip(ref v2, lights);
                 AddOptionalLightClip(ref v3, lights);
-
-                vertexes[i] = (v1, v2, v3);
+                triangles[i] = (v1, v2, v3);
             }
         }
 
         private static void AddOptionalLightClip(ref Vertex v, List<PerspectiveLight> lights)
         {
             var clipSpaces = new Vector4[lights.Count];
-
             for (int i = 0; i < lights.Count; i++)
             {
-                var light = lights[i];
-                Matrix<float> wtoc = light.getWToC();
-                Vector4 worldPos = v.worldPosition;
-
-                // Manually perform the transformation from world-space to the light's clip-space
-                var worldVec = MathNet.Numerics.LinearAlgebra.Vector<float>.Build.DenseOfArray(new float[] { worldPos.X, worldPos.Y, worldPos.Z, worldPos.W });
-                var clipVec = wtoc * worldVec;
-
-                // Store the resulting 4D clip-space vector
+                var worldVec = MathNet.Numerics.LinearAlgebra.Vector<float>.Build.DenseOfArray(new float[] { v.worldPosition.X, v.worldPosition.Y, v.worldPosition.Z, v.worldPosition.W });
+                var clipVec = lights[i].getWToC() * worldVec;
                 clipSpaces[i] = new Vector4(clipVec[0], clipVec[1], clipVec[2], clipVec[3]);
             }
-
             v.setLightClipSpaces(clipSpaces);
         }
 
-
-        private static void ApplyPerspectiveDivide(List<(Vertex v1, Vertex v2, Vertex v3)> vertexes)
+        private static void ApplyPerspectiveDivideAndScreenTransform(List<(Vertex v1, Vertex v2, Vertex v3)> triangles, int width, int height)
         {
-            for (int i = 0; i < vertexes.Count; i++)
+            for (int i = 0; i < triangles.Count; i++)
             {
-                var (v1, v2, v3) = vertexes[i];
+                var (v1, v2, v3) = triangles[i];
 
-                DivideByWAndTrim(ref v1);
-                DivideByWAndTrim(ref v2);
-                DivideByWAndTrim(ref v3);
+                float w1 = v1.clipPosition.W; v1.clipPosition = new Vector4(v1.clipPosition.X / w1, v1.clipPosition.Y / w1, v1.clipPosition.Z / w1, 1);
+                float w2 = v2.clipPosition.W; v2.clipPosition = new Vector4(v2.clipPosition.X / w2, v2.clipPosition.Y / w2, v2.clipPosition.Z / w2, 1);
+                float w3 = v3.clipPosition.W; v3.clipPosition = new Vector4(v3.clipPosition.X / w3, v3.clipPosition.Y / w3, v3.clipPosition.Z / w3, 1);
 
-                vertexes[i] = (v1, v2, v3);
+                v1.clipPosition = new Vector4((v1.clipPosition.X + 1) * 0.5f * width, (1 - v1.clipPosition.Y) * 0.5f * height, v1.clipPosition.Z, 1);
+                v2.clipPosition = new Vector4((v2.clipPosition.X + 1) * 0.5f * width, (1 - v2.clipPosition.Y) * 0.5f * height, v2.clipPosition.Z, 1);
+                v3.clipPosition = new Vector4((v3.clipPosition.X + 1) * 0.5f * width, (1 - v3.clipPosition.Y) * 0.5f * height, v3.clipPosition.Z, 1);
+
+                triangles[i] = (v1, v2, v3);
             }
-        }
-
-        private static void DivideByWAndTrim(ref Vertex v)
-        {
-            float w = v.clipPosition.W;
-            float x = v.clipPosition.X, y = v.clipPosition.Y, z = v.clipPosition.Z;
-
-            v.clipPosition = new Vector4(x / w, y / w, z / w, 1);
-        }
-
-
-
-        private static void NdcToScreen(List<(Vertex v1, Vertex v2, Vertex v3)> ndc, int width, int height)
-        {
-            for (int i = 0; i < ndc.Count; i++)
-            {
-                var (v1, v2, v3) = ndc[i];
-                ScaleVertex(ref v1, width, height);
-                ScaleVertex(ref v2, width, height);
-                ScaleVertex(ref v3, width, height);
-
-                ndc[i] = (v1, v2, v3);
-            }
-        }
-
-
-        private static void ScaleVertex(ref Vertex vertex, int width, int height)
-        {
-
-            float x = (vertex.clipPosition.X + 1) * 0.5f * width;
-            float y = (1 - vertex.clipPosition.Y) * 0.5f * height;
-            float z = vertex.clipPosition.Z;
-
-            vertex.clipPosition = new Vector4(x, y, z, 1);
-        }
-
-        public static void PrintMatrix(Matrix<float> matrix, string? name = null)
-        {
-            if (!string.IsNullOrEmpty(name))
-                Console.WriteLine($"Matrix: {name}");
-
-            int rows = matrix.RowCount;
-            int cols = matrix.ColumnCount;
-
-            for (int r = 0; r < rows; r++)
-            {
-                Console.Write("[ ");
-                for (int c = 0; c < cols; c++)
-                {
-                    Console.Write($"{matrix[r, c],8:0.####} ");
-                }
-                Console.WriteLine("]");
-            }
-
-            Console.WriteLine();
-        }
-
-        public static void PrintFrameBuffer(SDL_Color[,] frameBuffer)
-        {
-            int height = frameBuffer.GetLength(0);
-            int width = frameBuffer.GetLength(1);
-
-            int c = 0;
-
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    SDL_Color pixel = frameBuffer[y, x];
-                    int brightness = pixel.r + pixel.g + pixel.b;
-
-                    if (brightness > 0)
-                    {
-                        c++;
-                    }
-                }
-            }
-
-            Console.WriteLine("C pixels!: " + c);
-
         }
     }
 }

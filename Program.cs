@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Simple3dRenderer.Rendering;
 using Simple3dRenderer.Objects;
 using System.Runtime.Intrinsics.Arm;
+using Simple3dRenderer.Lighting;
 
 class Program
 {
@@ -27,17 +28,16 @@ class Program
     {
         Camera camera = new(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
 
-        // Mesh[] cubeWall = CubeWall.CreateCubeWall(10, 5, 1, z_init: -5);
-        Mesh cubeWall = MeshFactory.CreateCube(new Vector3(10, 5, 1), new SDL_Color{ r = 124, g = 250, b = 189, a = 255});
-
-        // PerspectiveLight light = new PerspectiveLight(RENDER_WIDTH,RENDER_HEIGHT, RENDER_FOV, color: new(0.5f, 0.4f, 0.2f), farPlane: 10);
-        PerspectiveLight light = new PerspectiveLight(300, 300, 100, color: new(0.5f, 0.4f, 0.2f), farPlane: 20);
+        Mesh[] cubeWall = CubeWall.CreateCubeWall(10, 5, 1, z_init: -5);
+        // Mesh cubeWall = MeshFactory.CreateCube(new Vector3(10, 5, 1), new SDL_Color{ r = 124, g = 250, b = 189, a = 255});
+        // Mesh cube = MeshFactory.CreateCube(new Vector3(1, 1, 1), new SDL_Color{ r = 124, g = 250, b = 189, a = 255});
+        // cube.SetPosition(new Vector3(0, 0, -5));
 
         // mesh.texture = TextureLoader.LoadBMP("Textures/dragon_head_symbol.bmp");
 
         SDL_Color bg = new SDL_Color { r = 124, g = 240, b = 189, a = 255 };
 
-        return new Scene(camera, [cubeWall], [light], ambientLight: new Vector3(0.3f, 0.3f, 0.3f));
+        return new Scene(camera, cubeWall.ToList(), bg,  ambientLight: new Vector3(0.3f, 0.3f, 0.3f));
     }
 
 
@@ -83,6 +83,9 @@ class Program
             SDL_Event e;
 
             Scene scene = createScene();
+            PerspectiveLight light = new PerspectiveLight(300, 300, 100, color: new(0.5f, 0.4f, 0.2f), farPlane: 20);
+            List<PerspectiveLight> lights = [light];
+            var pipeline = new Pipeline(RENDER_WIDTH, RENDER_HEIGHT, lights);
 
             float camX = 0;
             float camZ = 0;
@@ -93,6 +96,7 @@ class Program
 
             Stopwatch swTotal = Stopwatch.StartNew();
             long lastTime = swTotal.ElapsedMilliseconds;
+
 
             while (running)
             {
@@ -133,15 +137,15 @@ class Program
                 scene.camera.SetPosition(new Vector3(camX, 0, camZ));
                 scene.camera.SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
-                ((PerspectiveLight)scene.lights[0]).SetPosition(new Vector3(camX, 0, camZ));
-                ((PerspectiveLight)scene.lights[0]).SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
+                light.SetPosition(new Vector3(camX, 0, camZ));
+                light.SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
-                ((PerspectiveLight)scene.lights[0]).setQuadratic(a);
+                light.setQuadratic(a);
 
 
                 var sw = Stopwatch.StartNew();
 
-                SDL_Color[,] frame = Pipeline.RenderScene(scene);
+                SDL_Color[,] frame = pipeline.RenderScene(scene);
 
                 sw.Stop();
                 Console.WriteLine("Renderer time: " + sw.ElapsedMilliseconds);
