@@ -13,7 +13,7 @@ class Program
     const int WINDOW_WIDTH = 1920;
     const int WINDOW_HEIGHT = 1080;
 
-    const int downScale = 1;
+    const int downScale = 2;
 
     const int RENDER_WIDTH = WINDOW_WIDTH / downScale;
     const int RENDER_HEIGHT = WINDOW_HEIGHT / downScale;
@@ -37,7 +37,7 @@ class Program
 
         SDL_Color bg = new SDL_Color { r = 124, g = 240, b = 189, a = 255 };
 
-        return new Scene(camera, cubeWall.ToList(), bg,  ambientLight: new Vector3(0.3f, 0.3f, 0.3f));
+        return new Scene(camera, cubeWall.ToList(), default,  ambientLight: new Vector3(0.01f, 0.01f, 0.01f));
     }
 
 
@@ -83,12 +83,13 @@ class Program
             SDL_Event e;
 
             Scene scene = createScene();
-            PerspectiveLight light = new PerspectiveLight(300, 300, 100, color: new(0.5f, 0.4f, 0.2f), farPlane: 20);
+            PerspectiveLight light = new PerspectiveLight(300, 300, 30, 5, 15, color: new(0.5f, 0.4f, 0.2f), farPlane: 20);
             List<PerspectiveLight> lights = [light];
             var pipeline = new Pipeline(RENDER_WIDTH, RENDER_HEIGHT, lights);
 
             float camX = 0;
             float camZ = 0;
+            float camY = 2.5f;
 
             float camrotY = 0;
 
@@ -96,6 +97,9 @@ class Program
 
             Stopwatch swTotal = Stopwatch.StartNew();
             long lastTime = swTotal.ElapsedMilliseconds;
+
+            long renderAvg = -1;
+
 
 
             while (running)
@@ -134,10 +138,10 @@ class Program
                 SDL3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL3.SDL_RenderClear(renderer);
 
-                scene.camera.SetPosition(new Vector3(camX, 0, camZ));
+                scene.camera.SetPosition(new Vector3(camX, camY, camZ));
                 scene.camera.SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
-                light.SetPosition(new Vector3(camX, 0, camZ));
+                light.SetPosition(new Vector3(camX, camY, camZ));
                 light.SetRotation(Quaternion.CreateFromAxisAngle(Vector3.UnitY, (float)(camrotY / 180 * Math.PI)));
 
                 light.setQuadratic(a);
@@ -145,10 +149,21 @@ class Program
 
                 var sw = Stopwatch.StartNew();
 
-                SDL_Color[,] frame = pipeline.RenderScene(scene);
+                SDL_Color[] frame = pipeline.RenderScene(scene);
 
                 sw.Stop();
-                Console.WriteLine("Renderer time: " + sw.ElapsedMilliseconds);
+
+                if (renderAvg == -1)
+                {
+                    renderAvg = sw.ElapsedMilliseconds;
+                }
+                else
+                {                
+                    renderAvg += sw.ElapsedMilliseconds;
+                }
+
+                renderAvg /= 2;
+                Console.WriteLine("Renderer time: " + renderAvg);
 
 
                 // Create texture once (during initialization)
@@ -169,7 +184,7 @@ class Program
                 {
                     for (int x = 0; x < RENDER_WIDTH; x++)
                     {
-                        SDL_Color c = frame[y, x];  // Assuming this is your 2D array access
+                        SDL_Color c = frame[y * RENDER_WIDTH + x];
                         pixelBuffer[y * pixelsPerRow + x] =
                             (UInt32)(c.r) | ((UInt32)(c.g) << 8) | ((UInt32)(c.b) << 16) | ((UInt32)(c.a) << 24);
                     }

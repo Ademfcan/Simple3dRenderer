@@ -27,5 +27,7 @@ namespace Simple3dRenderer.Rendering
         /// the initial state from the main buffers, effectively preparing it for the next frame's use.
         /// </summary>
         void MergeTile(T tileState, int tileMinX, int tileMinY);
+
+        void SyncPerFrameState(T otherState);
     }
 }

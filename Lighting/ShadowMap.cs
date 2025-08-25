@@ -83,9 +83,10 @@ namespace Simple3dRenderer.Lighting
             _pixels[y, x] = vf;
         }
 
+
         public void Initialize()
         {
-            for (int y = 0; y < _height; y++)
+            Parallel.For(0, _height, y =>
             {
                 for (int x = 0; x < _width; x++)
                 {
@@ -105,7 +106,7 @@ namespace Simple3dRenderer.Lighting
 
                     _pixels[y, x] = vf;
                 }
-            }
+            });
         }
 
         public float SampleVisibility(int x, int y, float z)

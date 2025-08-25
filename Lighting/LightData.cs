@@ -62,5 +62,10 @@ namespace Simple3dRenderer.Lighting{
         {
 
         }
+
+        public void SyncPerFrameState(LightData otherState)
+        {
+            
+        }
     }
 }

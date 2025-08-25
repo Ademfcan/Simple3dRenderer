@@ -6,10 +6,6 @@ using Simple3dRenderer.Textures;
 
 namespace Simple3dRenderer.Rendering
 {
-    // Make the struct implement our new interface
-    
-
-    // This processor remains unchanged. It works perfectly with the new system.
     public struct LightFragmentProcessor<T> : IFragmentProcessor<LightFragmentProcessor<T>, LightData> where T : IFragmentShader<T, LightData>
     {
         public static void ProcessFragment(ref LightData state, int x, int y, float z, float fw0, float fw1, float fw2, Vertex v0, Vertex v1, Vertex v2, bool isMultithreaded)

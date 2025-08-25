@@ -35,13 +35,13 @@ namespace Simple3dRenderer.Objects
         public PerspectiveLight(
             int HRes, int VRes,
             float fovDegrees,
+            float innerCutoffDegrees,
+            float outerCutoffDegrees,
             float nearPlane = 0.01f,
             float farPlane = 1e4f,
             Vector3? color = null,
             float intensity = 1f,
-            float quadratic = 0.4f,
-            float innerCutoffDegrees = 30f,
-            float outerCutoffDegrees = 45f)
+            float quadratic = 0.4f)
         {
             this.HRes = HRes;
             this.VRes = VRes;

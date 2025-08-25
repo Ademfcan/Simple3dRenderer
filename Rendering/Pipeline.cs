@@ -1,7 +1,4 @@
 using System.Numerics;
-using System.Collections.Generic;
-using System.Linq;
-using MathNet.Numerics.LinearAlgebra;
 using SDL;
 using Simple3dRenderer.Objects;
 using Simple3dRenderer.Textures;
@@ -56,7 +53,7 @@ namespace Simple3dRenderer.Rendering
             }
         }
 
-        public SDL_Color[,] RenderScene(Scene scene)
+        public SDL_Color[] RenderScene(Scene scene)
         {
             // --- 1. SHADOW MAPPING PASS ---
             _reusableShadowMapsList.Clear();
