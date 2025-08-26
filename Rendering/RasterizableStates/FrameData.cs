@@ -148,7 +148,7 @@ namespace Simple3dRenderer.Rendering
 
 
 
-        public int getHeight()
+        public int GetHeight()
 
         {
 
@@ -157,7 +157,7 @@ namespace Simple3dRenderer.Rendering
         }
 
 
-        public int getWidth()
+        public int GetWidth()
 
         {
 

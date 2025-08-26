@@ -53,8 +53,8 @@ namespace Simple3dRenderer.Lighting{
         }
 
         // --- Existing Methods ---
-        public int getHeight() => height;
-        public int getWidth() => width;
+        public int GetHeight() => height;
+        public int GetWidth() => width;
         public Texture? GetTexture() => texture;
         public void SetTexture(Texture? texture) => this.texture = texture;
 

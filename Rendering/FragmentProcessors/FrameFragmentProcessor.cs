@@ -14,7 +14,7 @@ namespace Simple3dRenderer.Rendering
          public static void ProcessFragment(ref FrameData state, int x, int y, float z,
         float fw0, float fw1, float fw2, Vertex v0, Vertex v1, Vertex v2, bool isMultithreaded)
         {
-            int index = y * state.getWidth() + x; // Use getWidth() for safety
+            int index = y * state.GetWidth() + x; // Use getWidth() for safety
             if (z < state.depthBuffer[index]) // Depth test is done here
             {
                 SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
@@ -170,22 +170,6 @@ namespace Simple3dRenderer.Rendering
 
     }
 
-    public struct MaterialShader<TState> : IFragmentShader<MaterialShader<TState>, TState>
-    where TState : IRasterizable, ITextured
-    {
-        public static SDL_Color getPixelColor(ref TState state, Vertex v0, Vertex v1, Vertex v2, float w0, float w1, float w2)
-        {
-            // Look up the texture from the state
-            if (state.GetTexture() != null)
-            {
-                return TextureShader.getPixelColor(v0, v1, v2, w0, w1, w2, state.GetTexture());
-            }
-            else
-            {
-                return SDLColorExtensions.Interpolate(v0.Color, v1.Color, v2.Color, w0, w1, w2);
-            }
-        }
-
-    }
+   
 
 }

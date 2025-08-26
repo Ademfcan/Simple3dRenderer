@@ -1,0 +1,106 @@
+root = true
+
+[*.cs]
+
+############################
+# Formatting & Style Rules #
+############################
+
+# Require XML documentation for publicly visible members
+dotnet_diagnostic.CS1591.severity = warning
+
+# Require braces for all control blocks
+csharp_prefer_braces = true:suggestion
+
+######################
+# Naming Conventions #
+######################
+
+# Private fields: _camelCase
+dotnet_naming_rule.private_fields_should_be__camel_case.severity = warning
+dotnet_naming_rule.private_fields_should_be__camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_should_be__camel_case.style = _camel_case_style
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers = *
+
+dotnet_naming_style._camel_case_style.capitalization = camel_case
+dotnet_naming_style._camel_case_style.required_prefix = _
+
+# Properties: PascalCase
+dotnet_naming_rule.properties_should_be_pascal_case.severity = warning
+dotnet_naming_rule.properties_should_be_pascal_case.symbols = properties
+dotnet_naming_rule.properties_should_be_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.properties.applicable_kinds = property
+dotnet_naming_symbols.properties.applicable_accessibilities = public, internal, protected
+dotnet_naming_symbols.properties.required_modifiers = *
+
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# Methods: PascalCase
+dotnet_naming_rule.methods_should_be_pascal_case.severity = warning
+dotnet_naming_rule.methods_should_be_pascal_case.symbols = methods
+dotnet_naming_rule.methods_should_be_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.methods.applicable_kinds = method
+dotnet_naming_symbols.methods.applicable_accessibilities = public, internal, protected
+dotnet_naming_symbols.methods.required_modifiers = *
+
+# Parameters: camelCase
+dotnet_naming_rule.parameters_should_be_camel_case.severity = warning
+dotnet_naming_rule.parameters_should_be_camel_case.symbols = parameters
+dotnet_naming_rule.parameters_should_be_camel_case.style = camel_case_style
+
+dotnet_naming_symbols.parameters.applicable_kinds = parameter
+dotnet_naming_symbols.parameters.applicable_accessibilities = *
+dotnet_naming_symbols.parameters.required_modifiers = *
+
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# Classes: PascalCase
+dotnet_naming_rule.classes_should_be_pascal_case.severity = warning
+dotnet_naming_rule.classes_should_be_pascal_case.symbols = classes
+dotnet_naming_rule.classes_should_be_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.classes.applicable_kinds = class
+dotnet_naming_symbols.classes.applicable_accessibilities = *
+dotnet_naming_symbols.classes.required_modifiers = *
+
+###################################
+# Member ordering (via analyzers) #
+###################################
+
+# Enforce fields → props → ctor → methods → helpers
+dotnet_diagnostic.SA1201.severity = warning
+dotnet_diagnostic.SA1202.severity = warning
+dotnet_diagnostic.SA1203.severity = warning
+
+###################################
+# Field immutability / usage rules#
+###################################
+
+# Private fields should be readonly unless const or static readonly
+dotnet_diagnostic.RCS1213.severity = warning  # "Private field can be made readonly" (requires Roslynator)
+
+# Avoid public fields (must use properties)
+dotnet_diagnostic.SA1401.severity = warning  # "Fields should be private"
+
+# Constants must use PascalCase (public) or _camelCase (private)
+dotnet_naming_rule.constants_should_be_pascal_case.severity = warning
+dotnet_naming_rule.constants_should_be_pascal_case.symbols = constants
+dotnet_naming_rule.constants_should_be_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = public, internal
+dotnet_naming_symbols.constants.required_modifiers = const
+
+#########################
+# Optional analyzers    #
+#########################
+
+# Use Roslynator or StyleCop.Analyzers for enforcement:
+# Install via NuGet:
+#   <PackageReference Include="StyleCop.Analyzers" Version="2.3.3" PrivateAssets="All" />
+#   <PackageReference Include="Roslynator.Analyzers" Version="4.13.0" PrivateAssets="All" />

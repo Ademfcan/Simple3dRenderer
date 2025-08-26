@@ -64,8 +64,8 @@ namespace Simple3dRenderer.Rendering
             float area = Edge(x0, y0, x1, y1, x2, y2);
             if (area <= 0) return;
 
-            int width = state.getWidth();
-            int height = state.getHeight();
+            int width = state.GetWidth();
+            int height = state.GetHeight();
 
             float invArea = 1.0f / area;
 
@@ -346,8 +346,8 @@ namespace Simple3dRenderer.Rendering
             float area = Edge(x0, y0, x1, y1, x2, y2);
             if (area <= 0) return;
 
-            int width = state.getWidth();
-            int height = state.getHeight();
+            int width = state.GetWidth();
+            int height = state.GetHeight();
 
             float screenArea = width * height;
             float triangleScreenCoverage = Math.Abs(area) / screenArea;
@@ -391,8 +391,8 @@ namespace Simple3dRenderer.Rendering
             bool edge1IsTopLeft = IsTopLeftEdge(x2, y2, x0, y0);
             bool edge2IsTopLeft = IsTopLeftEdge(x0, y0, x1, y1);
 
-            int width = state.getWidth();
-            int height = state.getHeight();
+            int width = state.GetWidth();
+            int height = state.GetHeight();
 
             int minX = Math.Max(0, (int)MathF.Floor(MathF.Min(x0, MathF.Min(x1, x2))));
             int maxX = Math.Min(width - 1, (int)MathF.Ceiling(MathF.Max(x0, MathF.Max(x1, x2))));
@@ -459,8 +459,8 @@ namespace Simple3dRenderer.Rendering
             bool edge1IsTopLeft = IsTopLeftEdge(x2, y2, x0, y0);
             bool edge2IsTopLeft = IsTopLeftEdge(x0, y0, x1, y1);
 
-            int width = state.getWidth();
-            int height = state.getHeight();
+            int width = state.GetWidth();
+            int height = state.GetHeight();
 
             int minX = Math.Max(0, (int)MathF.Floor(MathF.Min(x0, MathF.Min(x1, x2))));
             int maxX = Math.Min(width - 1, (int)MathF.Ceiling(MathF.Max(x0, MathF.Max(x1, x2))));
@@ -536,8 +536,8 @@ namespace Simple3dRenderer.Rendering
             bool edge1IsTopLeft = IsTopLeftEdge(x2, y2, x0, y0);
             bool edge2IsTopLeft = IsTopLeftEdge(x0, y0, x1, y1);
 
-            int width = state.getWidth();
-            int height = state.getHeight();
+            int width = state.GetWidth();
+            int height = state.GetHeight();
 
             int minX = Math.Max(0, (int)MathF.Floor(MathF.Min(x0, MathF.Min(x1, x2))));
             int maxX = Math.Min(width - 1, (int)MathF.Ceiling(MathF.Max(x0, MathF.Max(x1, x2))));

@@ -13,16 +13,16 @@ namespace Simple3dRenderer.Rendering
                 // Atomically check and set the depth value. Loop to handle race conditions.
                 do
                 {
-                    currentDepth = Volatile.Read(ref state.depthBuffer[y * state.getWidth() + x]);
+                    currentDepth = Volatile.Read(ref state.depthBuffer[y * state.GetWidth() + x]);
                     if (z >= currentDepth) return; // Failed depth test
-                } while (Interlocked.CompareExchange(ref state.depthBuffer[y * state.getWidth() + x], z, currentDepth) != currentDepth);
+                } while (Interlocked.CompareExchange(ref state.depthBuffer[y * state.GetWidth() + x], z, currentDepth) != currentDepth);
 
             }
             // single threaded with condition
-            else if (z < state.depthBuffer[y * state.getWidth() + x])
+            else if (z < state.depthBuffer[y * state.GetWidth() + x])
             {
                 
-                state.depthBuffer[y * state.getWidth() + x] = z; // Update depth buffer
+                state.depthBuffer[y * state.GetWidth() + x] = z; // Update depth buffer
                 
             }
         }

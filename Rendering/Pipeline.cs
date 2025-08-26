@@ -45,11 +45,11 @@ namespace Simple3dRenderer.Rendering
 
             foreach (var light in lights)
             {
-                var lightData = LightData.Create(light.getWidth(), light.getHeight());
+                var lightData = LightData.Create(light.Width, light.Height);
                 var lightDataWrapper = new StateWrapper<LightData> { State = lightData };
 
                 _lightDataWrappers.Add(lightDataWrapper);
-                _shadowRasterizers.Add(new TiledRasterizer<LightFragmentProcessor<MaterialShader<LightData>>, LightData>(light.getWidth(), light.getHeight(), lightDataWrapper));
+                _shadowRasterizers.Add(new TiledRasterizer<LightFragmentProcessor<MaterialShader<LightData>>, LightData>(light.Width, light.Height, lightDataWrapper));
             }
         }
 
@@ -84,7 +84,6 @@ namespace Simple3dRenderer.Rendering
             {
                 var allOpaqueTriangles = opaqueBatches.SelectMany(b => b.Triangles);
                 _depthRasterizer.Render(allOpaqueTriangles);
-                // Rasterizer.RasterizeTrianglesBatchOptimized<DepthPrePassProcessor, FrameData>(ref _mainFrameDataWrapper.State, allOpaqueTriangles, null);
             }
 
             // B) Opaque Color Pass
@@ -94,7 +93,6 @@ namespace Simple3dRenderer.Rendering
                 // Simplified struct modification
                 _mainFrameDataWrapper.State.SetTexture(batch.Texture);
                 _mainRasterizer.Render(batch.Triangles);
-                // Rasterizer.RasterizeTrianglesBatchOptimized<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(ref _mainFrameDataWrapper.State, batch.Triangles, null);
 
             }
 
@@ -104,8 +102,7 @@ namespace Simple3dRenderer.Rendering
             {
                 // Simplified struct modification
                 _mainFrameDataWrapper.State.SetTexture(batch.Texture);
-                _mainRasterizer.Render(batch.Triangles);
-                // Rasterizer.RasterizeTrianglesBatchOptimized<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(ref _mainFrameDataWrapper.State, batch.Triangles, null);
+                Rasterizer.RasterizeTrianglesBatchOptimized<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(ref _mainFrameDataWrapper.State, batch.Triangles, null);
             }
 
             return _mainFrameDataWrapper.State.FrameBuffer;
@@ -137,11 +134,11 @@ namespace Simple3dRenderer.Rendering
         // --- Static Geometry Processing Helpers ---
         private static readonly object s_nullTextureKey = new object();
 
-        private static List<TriangleBatch> ProcessAndBatchSceneObjects(List<Mesh> objects, IPerspective perspective, List<PerspectiveLight>? lights)
+        private static List<TriangleBatch> ProcessAndBatchSceneObjects(List<Mesh> objects, Viewport perspective, List<PerspectiveLight>? lights)
         {
             // 1. Change the dictionary's key type from Texture? to object.
             var batches = new Dictionary<object, List<(Vertex, Vertex, Vertex)>>();
-            var wtoc = perspective.getWToC();
+            var wtoc = perspective.GetWorldToClipMatrix();
 
             foreach (var mesh in objects)
             {
@@ -177,7 +174,7 @@ namespace Simple3dRenderer.Rendering
                 var clippedTriangles = Clipper.ClipTriangles(meshTriangles);
 
                 if (lights != null) AddOptionalLightClips(clippedTriangles, lights);
-                ApplyPerspectiveDivideAndScreenTransform(clippedTriangles, perspective.getWidth(), perspective.getHeight());
+                ApplyPerspectiveDivideAndScreenTransform(clippedTriangles, perspective.Width, perspective.Height);
 
                 // Add the processed triangles to the correct batch list.
                 triangleList.AddRange(clippedTriangles);
@@ -212,7 +209,7 @@ namespace Simple3dRenderer.Rendering
             for (int i = 0; i < lights.Count; i++)
             {
                 var worldVec = MathNet.Numerics.LinearAlgebra.Vector<float>.Build.DenseOfArray(new float[] { v.worldPosition.X, v.worldPosition.Y, v.worldPosition.Z, v.worldPosition.W });
-                var clipVec = lights[i].getWToC() * worldVec;
+                var clipVec = lights[i].GetWorldToClipMatrix() * worldVec;
                 clipSpaces[i] = new Vector4(clipVec[0], clipVec[1], clipVec[2], clipVec[3]);
             }
             v.setLightClipSpaces(clipSpaces);
