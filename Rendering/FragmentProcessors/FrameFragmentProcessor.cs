@@ -15,20 +15,17 @@ namespace Simple3dRenderer.Rendering
         float fw0, float fw1, float fw2, Vertex v0, Vertex v1, Vertex v2, bool isMultithreaded)
         {
             int index = y * state.GetWidth() + x; // Use getWidth() for safety
-            if (z < state.depthBuffer[index]) // Depth test is done here
-            {
-                SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
+            SDL_Color pixelColor = ShadeBlinnPhong(ref state, v0, v1, v2, fw0, fw1, fw2);
 
-                if (pixelColor.a >= 254) // Opaque
-                {
-                    state.FrameBuffer[index] = pixelColor;
-                    state.depthBuffer[index] = z;
-                }
-                else // Transparent
-                {
-                    state.FrameBuffer[index] = AlphaBlend(pixelColor, state.FrameBuffer[index]);
-                    // Not writing to depth buffer for simple transparency
-                }
+            if (pixelColor.a >= 254) // Opaque
+            {
+                state.FrameBuffer[index] = pixelColor;
+                state.depthBuffer[index] = z;
+            }
+            else // Transparent
+            {
+                state.FrameBuffer[index] = AlphaBlend(pixelColor, state.FrameBuffer[index]);
+                // Not writing to depth buffer for simple transparency
             }
         }
 

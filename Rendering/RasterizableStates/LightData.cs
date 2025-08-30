@@ -17,6 +17,7 @@ namespace Simple3dRenderer.Lighting{
         public SDL_Color[,] frameBuffer { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public float[,] depthBuffer { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
+        float[]? ITiledRasterizable<LightData>.depthBuffer => null;
 
         public static LightData Create(int width, int height)
         {

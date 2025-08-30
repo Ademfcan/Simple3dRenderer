@@ -35,8 +35,12 @@ namespace Simple3dRenderer.Rendering
 
         public required List<PerspectiveLight> Lights { get; set; }
 
+
         public readonly SDL_Color[] FrameBuffer;
         public readonly float[] depthBuffer;
+
+        float[]? ITiledRasterizable<FrameData>.depthBuffer => this.depthBuffer;
+
 
         public void InitFrame(Scene scene, List<DeepShadowMap> shadowMaps, List<PerspectiveLight> lights)
 

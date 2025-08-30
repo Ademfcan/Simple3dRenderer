@@ -105,6 +105,7 @@ namespace Simple3dRenderer.Rendering
                 Rasterizer.RasterizeTrianglesBatchOptimized<FrameFragmentProcessor<MaterialShader<FrameData>>, FrameData>(ref _mainFrameDataWrapper.State, batch.Triangles, null);
             }
 
+            // return PostProcessing.ApplyFXAA(_mainFrameDataWrapper.State.FrameBuffer, _mainFrameDataWrapper.State.GetWidth(), _mainFrameDataWrapper.State.GetHeight()); 
             return _mainFrameDataWrapper.State.FrameBuffer;
         }
 

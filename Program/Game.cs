@@ -21,11 +21,11 @@ public class Game
 
     private readonly int targetFps;
 
-    public Game(int windowWidth, int windowHeight, int downScaleRes, int targetFps)
+    public Game(int windowWidth, int windowHeight, float downScaleRes, int targetFps)
     {
         this.targetFps = targetFps;
-        int renderWidth = windowWidth / downScaleRes;
-        int renderHeight = windowHeight / downScaleRes;
+        int renderWidth = (int) (windowWidth / downScaleRes);
+        int renderHeight = (int) (windowHeight / downScaleRes);
 
 
 
@@ -33,14 +33,14 @@ public class Game
         _inputManager = new InputManager();
 
         _scene = SceneFactory.CreateScene(renderWidth, renderHeight);
-        _flashlight = new PerspectiveLight(300, 300, 30, color: new(0.5f, 0.4f, 0.2f), farPlane: 20, innerCutoffDegrees: 5, outerCutoffDegrees: 15);
+        _flashlight = new PerspectiveLight(100, 100, 30, color: new(0.5f, 0.4f, 0.2f), farPlane: 20, innerCutoffDegrees: 5, outerCutoffDegrees: 15);
 
         _scene.camera.Link(_flashlight);
 
         // give camera a little height boost
         _scene.camera.SetPosition(new Vector3(0, 2.5f, 0));
 
-        var pipeline = new Pipeline(renderWidth, renderHeight, [_flashlight]);
+        var pipeline = new Pipeline(renderWidth, renderHeight, []);
         _renderer = new Renderer(renderWidth, renderHeight, pipeline);
 
         // Set up all input bindings here

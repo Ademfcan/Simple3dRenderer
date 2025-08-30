@@ -8,7 +8,7 @@ class Program
     {
         try
         {
-            var game = new Game(WINDOW_WIDTH, WINDOW_HEIGHT, downScaleRes: 1, targetFps: 30);
+            var game = new Game(WINDOW_WIDTH, WINDOW_HEIGHT, downScaleRes: 1f, targetFps: 60);
             game.Run();
             game.Shutdown();
         }

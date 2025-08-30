@@ -191,40 +191,34 @@ namespace Simple3dRenderer.Rendering
 
         private void RasterizeTriangleInTile(Tile tile, ref TState localState, Vertex v0, Vertex v1, Vertex v2)
         {
+            // --- Setup code (Unchanged) ---
             float x0 = v0.clipPosition.X, y0 = v0.clipPosition.Y, z0 = v0.clipPosition.Z;
             float x1 = v1.clipPosition.X, y1 = v1.clipPosition.Y, z1 = v1.clipPosition.Z;
             float x2 = v2.clipPosition.X, y2 = v2.clipPosition.Y, z2 = v2.clipPosition.Z;
-
             float area = Edge(x0, y0, x1, y1, x2, y2);
             if (area <= 0) return;
             float invArea = 1.0f / area;
-
-            bool edge0IsTopLeft = (y1 == y2 && x2 > x1) || y2 > y1; // v1-v2
-            bool edge1IsTopLeft = (y2 == y0 && x0 > x2) || y0 > y2; // v2-v0
-            bool edge2IsTopLeft = (y0 == y1 && x1 > x0) || y1 > y0; // v0-v1
-
+            bool edge0IsTopLeft = (y1 == y2 && x2 > x1) || y2 > y1;
+            bool edge1IsTopLeft = (y2 == y0 && x0 > x2) || y0 > y2;
+            bool edge2IsTopLeft = (y0 == y1 && x1 > x0) || y1 > y0;
             int minX = Math.Max(tile.MinX, (int)MathF.Floor(MathF.Min(x0, MathF.Min(x1, x2))));
             int maxX = Math.Min(tile.MaxX, (int)MathF.Ceiling(MathF.Max(x0, MathF.Max(x1, x2))));
             int minY = Math.Max(tile.MinY, (int)MathF.Floor(MathF.Min(y0, MathF.Min(y1, y2))));
             int maxY = Math.Min(tile.MaxY, (int)MathF.Ceiling(MathF.Max(y0, MathF.Max(y1, y2))));
-
             if (minX > maxX || minY > maxY) return;
-
             float p_start_x = minX + 0.5f;
             float p_start_y = minY + 0.5f;
-
             float w0_row = Edge(x1, y1, x2, y2, p_start_x, p_start_y);
             float w1_row = Edge(x2, y2, x0, y0, p_start_x, p_start_y);
             float w2_row = Edge(x0, y0, x1, y1, p_start_x, p_start_y);
-
             float dw0_dx = y2 - y1; float dw0_dy = x1 - x2;
             float dw1_dx = y0 - y2; float dw1_dy = x2 - x0;
             float dw2_dx = y1 - y0; float dw2_dy = x0 - x1;
-
             int simdWidth = Vector<float>.Count;
             Vector<float> indexOffsets = GetIndexOffsets();
 
-            Vector<float> v_z = new Vector<float>(new float[] { v0.clipPosition.Z, v1.clipPosition.Z, v2.clipPosition.Z, 0, 0, 0, 0, 0 });
+            float[]? localDepthBuffer = localState.depthBuffer;
+            int tileWidth = localState.GetWidth();
 
             for (int y = minY; y <= maxY; y++)
             {
@@ -234,12 +228,10 @@ namespace Simple3dRenderer.Rendering
 
                 for (int x = minX; x <= maxX; x += simdWidth)
                 {
-                    // 1. Barycentric coordinates for 8 pixels
                     Vector<float> vw0 = new Vector<float>(w0) + indexOffsets * dw0_dx;
                     Vector<float> vw1 = new Vector<float>(w1) + indexOffsets * dw1_dx;
                     Vector<float> vw2 = new Vector<float>(w2) + indexOffsets * dw2_dx;
 
-                    // 2. Triangle coverage mask
                     Vector<int> coverageMask = Vector.GreaterThanOrEqual(vw0, Vector<float>.Zero) &
                                                Vector.GreaterThanOrEqual(vw1, Vector<float>.Zero) &
                                                Vector.GreaterThanOrEqual(vw2, Vector<float>.Zero);
@@ -252,44 +244,66 @@ namespace Simple3dRenderer.Rendering
                         continue;
                     }
 
-                    // 3. Vectorized Depth Test (This requires the FrameData changes from step 3)
-                    // Assuming localState has a public float[] depthBuffer and int width
-                    // This part is conceptual until FrameData is flattened.
-                    // float[] localDepthBuffer = localState.depthBuffer;
-                    // int tileWidth = localState.getWidth();
-                    // Vector<float> existingDepths = new Vector<float>(localDepthBuffer, (y - tile.MinY) * tileWidth + (x - tile.MinX));
+                    Vector<float> normalized_w0 = vw0 * invArea;
+                    Vector<float> normalized_w1 = vw1 * invArea;
+                    Vector<float> normalized_w2 = vw2 * invArea;
+                    Vector<float> pixelDepth = normalized_w0 * z0 + normalized_w1 * z1 + normalized_w2 * z2;
 
-                    // Vector<float> normalized_w0 = vw0 * invArea;
-                    // Vector<float> normalized_w1 = vw1 * invArea;
-                    // Vector<float> normalized_w2 = vw2 * invArea;
-                    // Vector<float> pixelDepth = normalized_w0 * v_z[0] + normalized_w1 * v_z[1] + normalized_w2 * v_z[2];
+                    // --- FIX: Introduce a flag to track if the SIMD test was run ---
+                    bool simdDepthTestWasPerformed = false;
 
-                    // Vector<int> depthMask = Vector.LessThan(pixelDepth, existingDepths);
-                    // coverageMask &= depthMask;
+                    if (localDepthBuffer != null)
+                    {
+                        int bufferIndex = (y - tile.MinY) * tileWidth + (x - tile.MinX);
+                        if (bufferIndex + simdWidth <= localDepthBuffer.Length)
+                        {
+                            Vector<float> existingDepths = new Vector<float>(localDepthBuffer, bufferIndex);
+                            Vector<int> depthMask = Vector.LessThan(pixelDepth, existingDepths);
+                            coverageMask &= depthMask;
 
+                            simdDepthTestWasPerformed = true; // Mark that the test was done
 
-                    // 4. Fallback to scalar loop on ONLY the pixels that passed the mask
+                            if (Vector.EqualsAll(coverageMask, Vector<int>.Zero))
+                            {
+                                w0 += dw0_dx * simdWidth;
+                                w1 += dw1_dx * simdWidth;
+                                w2 += dw2_dx * simdWidth;
+                                continue;
+                            }
+                        }
+                    }
+
                     int remaining = Math.Min(simdWidth, maxX - x + 1);
                     for (int i = 0; i < remaining; i++)
                     {
-                        // Test the mask for this specific pixel
                         if ((coverageMask[i] & 0x1) != 0)
                         {
                             float cur_w0 = vw0[i];
                             float cur_w1 = vw1[i];
                             float cur_w2 = vw2[i];
 
-                            // Top-left rule check
                             if ((cur_w0 > 0 || (cur_w0 == 0 && edge0IsTopLeft)) &&
                                 (cur_w1 > 0 || (cur_w1 == 0 && edge1IsTopLeft)) &&
                                 (cur_w2 > 0 || (cur_w2 == 0 && edge2IsTopLeft)))
                             {
-                                float fw0 = cur_w0 * invArea;
-                                float fw1 = cur_w1 * invArea;
-                                float fw2 = cur_w2 * invArea;
-                                float z = fw0 * z0 + fw1 * z1 + fw2 * z2;
+                                float z = pixelDepth[i];
 
-                                // The fragment processor now does the depth test and write
+                                // --- FIX: Perform scalar depth test if the SIMD one was skipped ---
+                                if (localDepthBuffer != null && !simdDepthTestWasPerformed)
+                                {
+                                    int localX = x + i - tile.MinX;
+                                    int localY = y - tile.MinY;
+                                    int bufferIndex = localY * tileWidth + localX;
+                                    if (z >= localDepthBuffer[bufferIndex])
+                                    {
+                                        continue; // Failed scalar depth test
+                                    }
+                                }
+
+                                float fw0 = normalized_w0[i];
+                                float fw1 = normalized_w1[i];
+                                float fw2 = normalized_w2[i];
+
                                 TProcessor.ProcessFragment(ref localState, x + i - tile.MinX, y - tile.MinY, z, fw0, fw1, fw2, v0, v1, v2, isMultithreaded: false);
                             }
                         }

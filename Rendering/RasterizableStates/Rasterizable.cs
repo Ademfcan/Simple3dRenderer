@@ -1,4 +1,4 @@
-using Simple3dRenderer.Lighting; 
+using Simple3dRenderer.Lighting;
 using Simple3dRenderer.Objects;
 
 namespace Simple3dRenderer.Rendering
@@ -21,6 +21,12 @@ namespace Simple3dRenderer.Rendering
 
     public interface ITiledRasterizable<T> : IRasterizable where T : ITiledRasterizable<T>
     {
+        /// <summary>
+        /// Provides direct access to the depth buffer for rasterizer optimizations, if one exists.
+        /// Returns null if the state does not use a traditional depth buffer.
+        /// </summary>
+        float[]? depthBuffer { get; }
+
         /// <summary>
         /// Creates a "deep enough" copy of the state for a single thread to use.
         /// Called once per thread; result is reused across frames.
