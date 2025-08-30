@@ -5,9 +5,11 @@ using System.Numerics;
 
 public static class SceneFactory
 {
-    public static Scene CreateScene(int renderWidth, int renderHeight, int fov)
+    public static Scene CreateScene(int renderWidth, int renderHeight)
     {
-        Camera camera = new(renderWidth, renderHeight, fov);
+        const int cameraFov = 60; // degrees
+
+        Camera camera = new(renderWidth, renderHeight, cameraFov);
         Mesh[] cubeWall = CubeWall.CreateCubeWall(5, 5, 1, z_init: -5);
 
         const float lightLvl = 0.1f;

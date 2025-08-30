@@ -7,13 +7,7 @@ using Simple3dRenderer.Rendering;
 
 public class Game
 {
-    private const int WINDOW_WIDTH = 1280;
-    private const int WINDOW_HEIGHT = 720;
-    private const int downScale = 2;
-    private const int RENDER_WIDTH = WINDOW_WIDTH / downScale;
-    private const int RENDER_HEIGHT = WINDOW_HEIGHT / downScale;
-    private const int RENDER_FOV = 60;
-    private const int FPS = 30;
+    
     private const float MoveSpeed = 2f;
 
     private readonly WindowManager _windowManager;
@@ -25,12 +19,20 @@ public class Game
     // default mouse mode is relative
     private bool isRelative = true;
 
-    public Game()
+    private readonly int targetFps;
+
+    public Game(int windowWidth, int windowHeight, int downScaleRes, int targetFps)
     {
-        _windowManager = new WindowManager("Demo", WINDOW_WIDTH, WINDOW_HEIGHT);
+        this.targetFps = targetFps;
+        int renderWidth = windowWidth / downScaleRes;
+        int renderHeight = windowHeight / downScaleRes;
+
+
+
+        _windowManager = new WindowManager("Demo", windowWidth, windowHeight);
         _inputManager = new InputManager();
 
-        _scene = SceneFactory.CreateScene(RENDER_WIDTH, RENDER_HEIGHT, RENDER_FOV);
+        _scene = SceneFactory.CreateScene(renderWidth, renderHeight);
         _flashlight = new PerspectiveLight(300, 300, 30, color: new(0.5f, 0.4f, 0.2f), farPlane: 20, innerCutoffDegrees: 5, outerCutoffDegrees: 15);
 
         _scene.camera.Link(_flashlight);
@@ -38,8 +40,8 @@ public class Game
         // give camera a little height boost
         _scene.camera.SetPosition(new Vector3(0, 2.5f, 0));
 
-        var pipeline = new Pipeline(RENDER_WIDTH, RENDER_HEIGHT, [_flashlight]);
-        _renderer = new Renderer(RENDER_WIDTH, RENDER_HEIGHT, pipeline);
+        var pipeline = new Pipeline(renderWidth, renderHeight, [_flashlight]);
+        _renderer = new Renderer(renderWidth, renderHeight, pipeline);
 
         // Set up all input bindings here
         SetupInputBindings();
@@ -123,7 +125,8 @@ public class Game
                 _renderer.Render(_windowManager.Renderer, _scene);
             }
 
-            SDL3.SDL_Delay((uint)Math.Max(0, (1000 / FPS) - (swTotal.ElapsedMilliseconds - currentTime)));
+            // wait for target fps or in a loop overrun dont wait at all
+            SDL3.SDL_Delay((uint)Math.Max(0, (1000 / targetFps) - (swTotal.ElapsedMilliseconds - currentTime)));
         }
     }
     public void Shutdown()
